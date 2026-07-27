@@ -30,6 +30,19 @@ class ResourceIntelligence:
     def __init__(self, state: ProjectState):
         self.state = state
 
+    def _skill_key(self, skill: Optional[str]) -> str:
+        return str(skill or "").strip().lower()
+
+    def _matches_required_skill(self, resource: Resource, required_skill: Optional[str]) -> bool:
+        if not required_skill:
+            return True
+        return resource.covers_skill(required_skill)
+
+    def _looks_like_new_team_member(self, resource: Resource) -> bool:
+        notes = str(getattr(resource, "notes", "") or "").lower()
+        markers = ["new team member", "new member", "joining", "ramp-up", "ramp up", "onboarding", "kt"]
+        return any(marker in notes for marker in markers)
+
     def sprint(self, sprint_ref: Optional[str]):
         if not sprint_ref:
             return None
@@ -80,26 +93,48 @@ class ResourceIntelligence:
             status = str(getattr(w.status, "value", w.status)).lower()
             if status not in {"done", "completed"}:
                 continue
-            if required_skill and str(w.required_skill).strip().lower() != str(required_skill).strip().lower():
+            if required_skill and self._skill_key(w.required_skill) != self._skill_key(required_skill):
                 continue
             rows.append(w)
         return rows
 
     def measured_daily_rate(self, resource: Resource, required_skill: Optional[str]) -> tuple[Optional[float], int]:
-        """Historical delivered work-units/day, using completed item estimates as work units.
+        """Historical delivery rate in hours/day using completed work evidence.
 
-        Actual-vs-estimate variance is deliberately NOT folded into this rate; it is
-        estimation reliability and is exposed separately.
+        The canonical model uses observed completed effort as the strongest signal of
+        how quickly a resource can turn work into delivery. When the history is sparse,
+        the rate remains conservative and falls back to the resource's workbook capacity.
         """
         rows = self._completed_history(resource, required_skill)
         if not rows:
             return None, 0
-        sprint_names = {w.assigned_sprint for w in rows}
-        elapsed_days = sum(self.sprint_days(s) for s in sprint_names)
-        if elapsed_days <= 0:
+        delivered = sum(
+            max(
+                0.0,
+                float(getattr(w, "actual_effort_hrs", 0.0) or 0.0)
+                if float(getattr(w, "actual_effort_hrs", 0.0) or 0.0) > 0.0
+                else float(getattr(w, "estimated_effort_hrs", 0.0) or 0.0),
+            )
+            for w in rows
+        )
+        if delivered <= 0:
             return None, 0
-        delivered = sum(max(0.0, float(w.estimated_effort_hrs)) for w in rows)
-        return (delivered / elapsed_days if delivered > 0 else None), len(rows)
+        return delivered / max(1.0, float(len(rows))), len(rows)
+
+    def team_historical_rate(self, resource: Resource, required_skill: Optional[str]) -> Optional[float]:
+        """Use peer history when the individual has no reliable history of their own."""
+        candidates = []
+        for peer in self.state.team:
+            if peer.resource_id == resource.resource_id or peer.name == resource.name:
+                continue
+            if required_skill and not self._matches_required_skill(peer, required_skill):
+                continue
+            rate, _ = self.measured_daily_rate(peer, required_skill)
+            if rate is not None and rate > 0:
+                candidates.append(rate)
+        if not candidates:
+            return None
+        return sum(candidates) / len(candidates)
 
     def estimation_reliability(self, resource: Resource, required_skill: Optional[str]) -> Optional[float]:
         rows = [w for w in self._completed_history(resource, required_skill)
@@ -116,21 +151,37 @@ class ResourceIntelligence:
     def evidence(self, resource: Resource, item: Optional[WorkItem],
                  sprint_ref: Optional[str]) -> ResourceRateEvidence:
         required_skill = item.required_skill if item else None
-        skill_match = (not required_skill) or resource.covers_skill(required_skill)
+        skill_match = self._matches_required_skill(resource, required_skill)
         measured, n = self.measured_daily_rate(resource, required_skill)
-        # Fallback is neutral, resource-specific workbook capacity/day.  No level multiplier.
+        team_rate = None
+        source = "resource_capacity"
+        if measured is not None:
+            rate = measured
+            source = "individual_history"
+        elif self._looks_like_new_team_member(resource):
+            rate = None
+            source = "resource_capacity"
+        else:
+            team_rate = self.team_historical_rate(resource, required_skill)
+            if team_rate is not None:
+                rate = team_rate
+                source = "team_history"
+            else:
+                rate = None
+        # Fallback is neutral, resource-specific workbook capacity/day.
         capacity_daily = max(0.0, float(resource.daily_capacity_hrs)) * \
             max(0.0, float(resource.allocation_pct)) * max(0.0, float(resource.availability_pct))
-        rate = measured if measured is not None else capacity_daily
+        rate = rate if rate is not None else capacity_daily
         # A known mismatch is infeasible for reassignment; do not invent a mismatch penalty.
         if not skill_match:
             rate = 0.0
+            source = "skill_mismatch"
         cap = self.effective_capacity_hours(resource, sprint_ref)
         committed = self.committed_hours(resource, sprint_ref)
         return ResourceRateEvidence(
             resource_id=resource.resource_id,
             daily_rate_hrs=max(0.0, rate),
-            source="individual_history" if measured is not None else "resource_capacity",
+            source=source,
             sample_size=n,
             estimation_reliability=self.estimation_reliability(resource, required_skill),
             skill_match=skill_match,

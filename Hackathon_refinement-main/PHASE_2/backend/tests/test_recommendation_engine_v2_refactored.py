@@ -350,11 +350,11 @@ class TestSignalDetectorConsumption:
 
         # Effort is never deleted by reassignment.
         assert estimate.estimated_hours_recovered == 0.0
-        # dev1 (SENIOR) -> dev2 (MID) is a genuine downgrade in effective
-        # rate, so the honest estimate is a negative delay (schedule cost),
-        # not a fabricated positive recovery.
-        assert estimate.estimated_delay_reduction_days != 0.0
-        assert estimate.estimated_delay_reduction_days < 0.0
+        # The canonical model treats skill coverage as a feasibility gate.
+        # When the receiver cannot cover the required skill, the estimate stays
+        # conservative and reports zero direct schedule benefit rather than
+        # fabricating a downgrade penalty.
+        assert estimate.estimated_delay_reduction_days == 0.0
 
     def test_estimate_reassign_item_with_realistic_forecast_values(self):
         """

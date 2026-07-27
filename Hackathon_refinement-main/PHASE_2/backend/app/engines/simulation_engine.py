@@ -1499,6 +1499,8 @@ class ActionApplicatorV2:
 
             # (a) Commit the swarming resource's sprint capacity to this item
             if swarm_resource is not None:
+                from app.engines.resource_intelligence import ResourceIntelligence
+                ri = ResourceIntelligence(state)
                 daily_hrs = float(getattr(swarm_resource, "daily_capacity_hrs", 8.0) or 8.0)
                 avail = float(getattr(swarm_resource, "availability_pct", 1.0) or 1.0)
                 sprint_ids = set(rec.affected_sprint_ids) if rec.affected_sprint_ids else set()
@@ -1512,10 +1514,13 @@ class ActionApplicatorV2:
                         for e in sprint.capacity_breakdown
                     )
                     if not already_entered:
+                        sprint_ref = sprint.sprint_id if sprint.sprint_id else sprint.sprint_name
+                        free_hours = ri.free_capacity_hours(swarm_resource, sprint_ref, exclude_item_ids={item_id})
+                        contributed_hours = min(daily_hrs * avail, max(0.0, free_hours))
                         sprint.capacity_breakdown.append(
                             SprintCapacityEntry(
                                 resource_id=swarm_resource_id,
-                                hours=daily_hrs * avail,
+                                hours=contributed_hours,
                                 source="swarm",
                             )
                         )

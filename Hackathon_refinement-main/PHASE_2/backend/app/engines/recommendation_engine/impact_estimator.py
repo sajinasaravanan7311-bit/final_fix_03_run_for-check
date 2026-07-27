@@ -475,50 +475,64 @@ class ImpactEstimator:
         item_hours = self._sum_item_remaining_effort(candidate.affected_item_ids)
         avg_daily_velocity = max(1.0, self.upstream.metrics.actual_avg_velocity / 8.0)
 
-        source_id = candidate.affected_resource_ids[0] if candidate.affected_resource_ids else None
-        source_dev = next(
-            (dm for dm in self.upstream.metrics.resource_metrics.developer_metrics if dm.resource_id == source_id),
-            None,
-        ) if source_id else None
-
-        # Overload relief: how much of the source's queue exceeded their capacity?
-        if source_dev:
-            # Estimate source capacity from allocation × availability × 8h/day × sprint days
-            source_resource = next((r for r in self.project_state.team if r.resource_id == source_id), None)
-            active_sprints = [
-                s for s in self.project_state.sprints
-                if hasattr(s, "status") and str(s.status).endswith(("NOT_STARTED", "IN_PROGRESS"))
-            ]
-            sprint_days = active_sprints[0].working_days if active_sprints else 10
-            source_capacity = (
-                (source_resource.allocation_pct * source_resource.availability_pct * 8.0 * sprint_days)
-                if source_resource else avg_daily_velocity * sprint_days
+        sprint_ref = candidate.affected_sprint_ids[0] if candidate.affected_sprint_ids else None
+        receiver_id = candidate.affected_resource_ids[0] if candidate.affected_resource_ids else None
+        source_id = candidate.simulation_params.get("source_resource_id") if getattr(candidate, "simulation_params", None) else None
+        if not source_id:
+            source_id = next(
+                (
+                    wi.assigned_resource
+                    for wi in self.project_state.work_items
+                    if wi.item_id in candidate.affected_item_ids and getattr(wi, "assigned_resource", None)
+                ),
+                None,
             )
-            source_assigned = source_dev.remaining_effort_hours
-            source_load_before = source_assigned / max(source_capacity, 1.0)
-            source_load_after  = max(0.0, source_assigned - item_hours) / max(source_capacity, 1.0)
 
-            if source_load_before > 1.0 and source_load_after <= 1.0:
-                # Source was overloaded; moving these items resolves the queue
-                overload_excess_hours = (source_load_before - 1.0) * source_capacity
-                delay_days = overload_excess_hours / avg_daily_velocity
-            else:
-                delay_days = 0.0   # source was not overloaded; rebalance is structural only
+        source_resource = next((r for r in self.project_state.team if r.resource_id == source_id), None)
+        receiver_resource = next((r for r in self.project_state.team if r.resource_id == receiver_id), None)
 
-            spillover_risk_delta = -max(0.0, source_load_before - 1.0) * item_hours / max(source_capacity, 1.0)
-            risk_reduction = min(0.10, max(0.0, abs(spillover_risk_delta)))
-            notes = (
-                f"Source {source_id} load: {source_load_before:.0%} → {source_load_after:.0%} "
-                f"after moving {round(item_hours, 0):.0f}h. "
-                f"{'Overload resolved; ' if source_load_before > 1.0 else 'No overload; '}delay saving: {delay_days:.1f}d. "
-                f"No effort deleted."
-            )
-            confidence = ConfidenceLevel.MEDIUM if source_load_before > 1.0 else ConfidenceLevel.LOW
-        else:
+        if source_resource is None or receiver_resource is None:
             delay_days = 0.0
             risk_reduction = 0.02
-            notes = "Source resource metrics unavailable; structural rebalance only. No effort deleted."
+            notes = "Source or receiver resource metadata unavailable; structural rebalance only. No effort deleted."
             confidence = ConfidenceLevel.LOW
+        else:
+            src = self.resource_intelligence.evidence(source_resource, None, sprint_ref)
+            dst = self.resource_intelligence.evidence(receiver_resource, None, sprint_ref)
+            source_capacity = max(src.sprint_capacity_hrs, 1.0)
+            receiver_capacity = max(dst.sprint_capacity_hrs, 1.0)
+            source_load_before = src.committed_hrs / max(source_capacity, 1.0)
+            source_load_after = max(0.0, src.committed_hrs - item_hours) / max(source_capacity, 1.0)
+            receiver_load_before = dst.committed_hrs / max(receiver_capacity, 1.0)
+            receiver_load_after = (dst.committed_hrs + item_hours) / max(receiver_capacity, 1.0)
+
+            if receiver_load_after > 1.0:
+                delay_days = 0.0
+                risk_reduction = 0.0
+                notes = (
+                    f"Receiver {receiver_id} would be overloaded after the move: "
+                    f"{receiver_load_before:.0%} → {receiver_load_after:.0%}; no rebalance benefit claimed."
+                )
+                confidence = ConfidenceLevel.MEDIUM
+            elif source_load_before > 1.0 and source_load_after <= 1.0:
+                overload_excess_hours = (source_load_before - 1.0) * source_capacity
+                delay_days = overload_excess_hours / max(avg_daily_velocity, 0.01)
+                spillover_risk_delta = -max(0.0, source_load_before - 1.0) * item_hours / max(source_capacity, 1.0)
+                risk_reduction = min(0.10, max(0.0, abs(spillover_risk_delta)))
+                notes = (
+                    f"Source {source_id} load: {source_load_before:.0%} → {source_load_after:.0%}; "
+                    f"receiver {receiver_id} load: {receiver_load_before:.0%} → {receiver_load_after:.0%}; "
+                    f"overload relieved; delay saving: {delay_days:.1f}d. No effort deleted."
+                )
+                confidence = ConfidenceLevel.MEDIUM if source_load_before > 1.0 else ConfidenceLevel.LOW
+            else:
+                delay_days = 0.0
+                risk_reduction = 0.0
+                notes = (
+                    f"Source {source_id} is not meaningfully overloaded after the move; "
+                    f"receiver {receiver_id} remains feasible at {receiver_load_after:.0%} load."
+                )
+                confidence = ConfidenceLevel.LOW
 
         return self._build_estimate(
             candidate,

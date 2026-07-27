@@ -747,6 +747,8 @@ class MetricsEngine:
                 committed = self.resource_intelligence.committed_hours(resource, sprint.sprint_id)
                 per_sprint[sprint.sprint_id] = committed / max(capacity, 1.0)
             result[resource.resource_id] = per_sprint
+            if getattr(resource, "name", None):
+                result[resource.name] = per_sprint
         return result
 
     def _build_per_resource_base_velocity(
