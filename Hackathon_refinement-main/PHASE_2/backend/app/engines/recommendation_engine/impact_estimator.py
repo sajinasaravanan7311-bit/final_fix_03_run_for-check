@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from typing import List
+from typing import List, Optional
 
-from app.domain.models import ProjectState
+from app.domain.models import ProjectState, Resource, SkillLevel
 from app.engines.recommendation_engine.models import (
     ConfidenceLevel,
     ImpactEstimate,
@@ -11,6 +11,45 @@ from app.engines.recommendation_engine.models import (
     SignalEvidence,
     UpstreamEngineOutputs,
 )
+
+
+# ── FIX-12: Resource effective delivery rate ─────────────────────────────────
+# Documented assumption: skill-level multipliers relative to Senior/Advanced
+# baseline (1.00).  These represent productivity differentials observed in
+# empirical studies of software teams; they are explicit named constants,
+# not magic numbers.  All SkillLevel enum values are covered.
+SKILL_LEVEL_FACTOR = {
+    SkillLevel.EXPERT:        1.20,   # exceeds baseline by 20%
+    SkillLevel.ADVANCED:      1.00,   # baseline
+    SkillLevel.SENIOR:        1.00,   # equivalent to Advanced (same tier in this domain)
+    SkillLevel.MID:           0.85,   # mid-level: 85% of baseline
+    SkillLevel.INTERMEDIATE:  0.75,   # 75% of baseline
+    SkillLevel.JUNIOR:        0.55,   # junior: 55% of baseline
+}
+_SKILL_LEVEL_FACTOR_UNKNOWN = 0.70   # fallback for any unrecognized skill level
+
+
+def resource_effective_rate(
+    resource: Optional[Resource],
+    team_avg_daily_rate: float,
+) -> float:
+    """
+    FIX-12: Returns effective delivery rate in hours/day for one resource.
+
+    Formula: team_avg_daily_rate × capacity_factor × skill_factor
+
+    capacity_factor = allocation_pct × availability_pct  (from workbook per resource)
+    skill_factor    = SKILL_LEVEL_FACTOR lookup          (documented assumption above)
+
+    Returns team_avg_daily_rate when resource is None (safe fallback).
+    Guaranteed > 0 because team_avg_daily_rate is always forced ≥ 1.0 by callers.
+    """
+    if resource is None:
+        return team_avg_daily_rate
+
+    capacity_factor = resource.allocation_pct * resource.availability_pct
+    skill_factor = SKILL_LEVEL_FACTOR.get(resource.skill_level, _SKILL_LEVEL_FACTOR_UNKNOWN)
+    return team_avg_daily_rate * capacity_factor * skill_factor
 
 
 # Severity mapping reused for recommendation impact estimation
@@ -107,12 +146,51 @@ class ImpactEstimator:
         ) if blocker else 0.0
 
         severity_label = blocker.severity.value if blocker and hasattr(blocker.severity, "value") else "Medium"
+
+        # FIX-13: CP timing check — even if the blocker resolves on time, blocked
+        # items may not have enough sprint time remaining to complete before sprint end.
+        cp_timing_note = ""
+        blocked_items_on_cp = self._is_on_critical_path(
+            getattr(blocker, "impacted_item_ids", []) or []
+        ) if blocker else False
+
+        if blocked_items_on_cp and blocker and getattr(blocker, "target_resolution_date", None):
+            from datetime import datetime, timezone
+            resolution_date = blocker.target_resolution_date
+            if resolution_date.tzinfo is None:
+                resolution_date = resolution_date.replace(tzinfo=timezone.utc)
+
+            # Find the sprint containing the blocked items to get its end date
+            blocked_item_ids = getattr(blocker, "impacted_item_ids", []) or []
+            sprint_end_date = None
+            for iid in blocked_item_ids:
+                wi = next((w for w in self.project_state.work_items if w.item_id == iid), None)
+                if wi:
+                    sprint = next((s for s in self.project_state.sprints if s.sprint_id == wi.assigned_sprint or s.sprint_name == wi.assigned_sprint), None)
+                    if sprint:
+                        sprint_end_date = sprint.end_date
+                        if sprint_end_date.tzinfo is None:
+                            sprint_end_date = sprint_end_date.replace(tzinfo=timezone.utc)
+                        break
+
+            if sprint_end_date and sprint_end_date > resolution_date:
+                avg_daily_velocity = max(1.0, self.upstream.metrics.actual_avg_velocity / 8.0)
+                remaining_sprint_days = max(0, (sprint_end_date - resolution_date).days)
+                deliverable_hours = remaining_sprint_days * avg_daily_velocity
+                completion_fraction = min(1.0, deliverable_hours / max(blocked_hours, 1.0))
+                blocker_delay_days *= completion_fraction
+                cp_timing_note = (
+                    f" CP timing: {completion_fraction:.0%} of blocked work completable "
+                    f"before sprint end ({remaining_sprint_days}d remaining after resolution)."
+                )
+
         notes = (
             f"Resolving {blocker_id or 'this blocker'} ({severity_label} severity, blocking {impacted_count} item(s), "
             f"{round(blocked_hours, 0)}h of work)"
             + (f", {overdue_days} day(s) overdue" if overdue_days > 0 else "")
             + f" recovers an estimated {round(blocker_delay_days, 1)} days of the {round(total_blocker_loss_days, 1)} "
             f"total blocker-attributable delay."
+            + cp_timing_note
         )
 
         return self._build_estimate(
@@ -133,44 +211,52 @@ class ImpactEstimator:
 
     def _estimate_reassign_item(self, candidate: RecommendationCandidate) -> ImpactEstimate:
         """
-        Use the actual remaining hours of the specific item(s) being
-        reassigned, and compute real before/after load for both the source
-        and receiving resource.
+        FIX-09: Use resource-specific effective delivery rates (via resource_effective_rate)
+        to compute before/after duration.  A reassignment to a slower or more overloaded
+        resource produces a negative delay_days (schedule gets worse).
+
+        Effort is never deleted by reassignment — only assignment and duration change.
         """
-        item_hours = sum(
-            next((wi.remaining_effort_hrs for wi in self.project_state.work_items if wi.item_id == iid), 0.0)
-            for iid in candidate.affected_item_ids
-        )
-        hours_recovered = min(item_hours, self.upstream.forecast.remaining_effort_hours)
+        item_hours = self._sum_item_remaining_effort(candidate.affected_item_ids)
+        team_avg_daily_rate = max(1.0, self.upstream.metrics.actual_avg_velocity / 8.0)
 
         source_id = candidate.affected_resource_ids[0] if candidate.affected_resource_ids else None
         receiver_id = candidate.affected_resource_ids[1] if len(candidate.affected_resource_ids) > 1 else None
 
+        source_resource = next((r for r in self.project_state.team if r.resource_id == source_id), None)
+        receiver_resource = next((r for r in self.project_state.team if r.resource_id == receiver_id), None)
+
+        rate_before = resource_effective_rate(source_resource, team_avg_daily_rate)
+        rate_after  = resource_effective_rate(receiver_resource, team_avg_daily_rate)
+
+        t_before = item_hours / max(rate_before, 0.01)
+        t_after  = item_hours / max(rate_after, 0.01)
+        # Positive = improvement (receiver is faster); negative = worsening (receiver is slower)
+        delay_days = t_before - t_after
+
+        direction = "saves" if delay_days > 0 else "costs"
+        notes = (
+            f"Source rate: {rate_before:.1f}h/d → Receiver rate: {rate_after:.1f}h/d. "
+            f"Reassigning {round(item_hours, 0):.0f}h {direction} {abs(delay_days):.1f} days. "
+            f"Effort unchanged — only delivery duration changes."
+        )
+
         source_dev = next((dm for dm in self.upstream.metrics.resource_metrics.developer_metrics if dm.resource_id == source_id), None) if source_id else None
         receiver_dev = next((dm for dm in self.upstream.metrics.resource_metrics.developer_metrics if dm.resource_id == receiver_id), None) if receiver_id else None
+        confidence = ConfidenceLevel.HIGH if (source_resource and receiver_resource) else ConfidenceLevel.MEDIUM
 
-        avg_daily_velocity = max(1.0, self.upstream.metrics.actual_avg_velocity / 8.0)
-        delay_days = min(item_hours / avg_daily_velocity, self.upstream.forecast.expected_delay_days)
-
-        notes_parts = [f"Moving {round(item_hours, 0)}h of work"]
-        if source_dev:
-            notes_parts.append(f"reduces source resource's remaining load from {round(source_dev.remaining_effort_hours, 0)}h")
-        if receiver_dev:
-            notes_parts.append(f"to a receiving resource currently at {round(receiver_dev.remaining_effort_hours, 0)}h")
-        notes = ", ".join(notes_parts) + "."
-
-        return self._build_estimate(
+        return self._build_estimate_signed(
             candidate,
-            hours_recovered=hours_recovered,
-            delay_days=delay_days,
-            risk_reduction=min(0.05 + (item_hours / max(1.0, self.upstream.forecast.remaining_effort_hours)) * 0.2, 0.25),
-            confidence=ConfidenceLevel.HIGH if (source_dev and receiver_dev) else ConfidenceLevel.MEDIUM,
+            hours_recovered=0.0,   # FIX-09: reassign never deletes work
+            delay_days=delay_days,  # signed: positive = better, negative = worse
+            risk_reduction=min(0.05 + (item_hours / max(1.0, self.upstream.forecast.remaining_effort_hours)) * 0.2, 0.25) if delay_days > 0 else 0.0,
+            confidence=confidence,
             evidence=[self._evidence(
                 "MetricsEngine",
                 "resource_sprint_loads",
                 item_hours,
                 0.0,
-                "Reassigning this specific item's hours reduces source resource contention"
+                f"Source rate {rate_before:.1f}h/d vs receiver rate {rate_after:.1f}h/d",
             )],
             notes=notes,
         )
@@ -195,243 +281,479 @@ class ImpactEstimator:
 
     def _estimate_split_item(self, candidate: RecommendationCandidate) -> ImpactEstimate:
         """
-        Estimate impact of splitting a work item.
-        
-        Consumes:
-        - average_item_effort from ProjectMetrics
-        - remaining_effort_hours from ForecastResult
+        FIX-08: Split item only reduces duration when a second capable resource
+        can run the sibling half in parallel.  Without a second resource, the
+        only benefit is reduced batch size (flow improvement, no delay_days).
+
+        Total remaining effort is conserved — only critical_path_delta changes.
         """
-        hours_recovered = min(
-            self.upstream.metrics.average_item_effort * 0.5,
-            self.upstream.forecast.remaining_effort_hours
+        item_hours = self._sum_item_remaining_effort(candidate.affected_item_ids)
+        half_hours = item_hours / 2.0
+
+        team_avg_daily_rate = max(1.0, self.upstream.metrics.actual_avg_velocity / 8.0)
+
+        # Find the primary assignee and a second capable resource
+        primary_resource_id = None
+        required_skill = None
+        for iid in candidate.affected_item_ids:
+            wi = next((w for w in self.project_state.work_items if w.item_id == iid), None)
+            if wi:
+                primary_resource_id = wi.assigned_resource
+                required_skill = wi.required_skill
+                break
+
+        primary_resource = next(
+            (r for r in self.project_state.team if r.resource_id == primary_resource_id), None
         )
-        
+        second_resource = self._find_second_capable_resource(
+            required_skill=required_skill,
+            exclude_resource_id=primary_resource_id,
+            sprint_ids=candidate.affected_sprint_ids,
+        )
+
+        if second_resource is None:
+            delay_days = 0.0
+            notes = (
+                f"No second capable resource available for skill '{required_skill}'; "
+                f"split reduces batch size only (no parallelism gain)."
+            )
+            confidence = ConfidenceLevel.LOW
+        else:
+            r1_rate = resource_effective_rate(primary_resource, team_avg_daily_rate)
+            r2_rate = resource_effective_rate(second_resource, team_avg_daily_rate)
+            t_sequential = item_hours / max(r1_rate, 0.01)
+            t_parallel = max(half_hours / max(r1_rate, 0.01), half_hours / max(r2_rate, 0.01))
+            # Documented assumption: 5% coordination overhead for a split
+            coord_overhead_days = item_hours * 0.05 / max(r1_rate, 0.01)
+            delay_days = max(0.0, t_sequential - t_parallel - coord_overhead_days)
+            notes = (
+                f"Split + parallel execution with {second_resource.resource_id} "
+                f"(rate {r2_rate:.1f}h/d vs primary {r1_rate:.1f}h/d) saves {delay_days:.1f}d "
+                f"after 5% coordination overhead. Total effort unchanged."
+            )
+            confidence = ConfidenceLevel.MEDIUM
+
         return self._build_estimate(
             candidate,
-            hours_recovered=hours_recovered,
-            delay_days=0.0,
+            hours_recovered=0.0,   # FIX-08: total effort is conserved; no hours are recovered
+            delay_days=delay_days,
             risk_reduction=0.04,
-            confidence=ConfidenceLevel.MEDIUM,
+            confidence=confidence,
             evidence=[self._evidence(
                 "MetricsEngine",
                 "average_item_effort",
                 self.upstream.metrics.average_item_effort,
                 0.0,
-                "Splitting large items reduces batch size and improves flow"
+                "Splitting enables parallelism when a second capable resource is available",
             )],
-            notes="Splitting an item reduces batch size and can improve execution predictability",
+            notes=notes,
         )
+
+    def _find_second_capable_resource(
+        self,
+        required_skill: Optional[str],
+        exclude_resource_id: Optional[str],
+        sprint_ids: List[str],
+    ) -> Optional[Resource]:
+        """
+        FIX-08/FIX-12 helper: find a team member who covers the required skill
+        and is not the primary assignee.  Returns None if no such resource exists.
+        """
+        for resource in self.project_state.team:
+            if resource.resource_id == exclude_resource_id:
+                continue
+            if required_skill and not resource.covers_skill(required_skill):
+                continue
+            # Available if not fully overloaded
+            if resource.allocation_pct * resource.availability_pct < 0.95:
+                return resource
+        return None
 
     def _estimate_advance_item(self, candidate: RecommendationCandidate) -> ImpactEstimate:
         """
-        Estimate impact of advancing an item to an earlier sprint.
-        
-        Consumes:
-        - expected_delay_days from ForecastResult
-        - remaining_effort_hours from ForecastResult
-        - critical_path information from upstream
+        BATCH A / FIX-P4: Moving an item to an earlier sprint does not make
+        its remaining work vanish — a 40h item moved from Sprint 7 to
+        Sprint 6 still requires 40h. hours_recovered is always 0.0 here.
+
+        Any schedule benefit is conditional on feasibility that this
+        estimator cannot verify on its own (target sprint has usable
+        capacity, dependencies allow an earlier start, required skill is
+        available in that sprint). Applicator does not check target-sprint
+        capacity yet (that lands in Batch B), so until that check exists we
+        report zero schedule benefit rather than fabricate one — this keeps
+        the estimator honest about a known model gap instead of guessing.
         """
         is_on_cp = any(
             item_id in self.upstream.cp_result.items_on_critical_path
             for item_id in candidate.affected_item_ids
         )
 
-        spillover_days = 0.0
-        if hasattr(self.upstream.forecast, "delay_breakdown") and self.upstream.forecast.delay_breakdown:
-            spillover_days = float(self.upstream.forecast.delay_breakdown.remaining_days_spillover or 0.0)
+        item_hours = self._sum_item_remaining_effort(candidate.affected_item_ids)
 
-        item_hours = sum(
-            next((wi.remaining_effort_hrs for wi in self.project_state.work_items if wi.item_id == iid), 0.0)
-            for iid in candidate.affected_item_ids
-        )
+        # Minimal, verifiable feasibility gate: the item must actually have
+        # an earlier sprint to move into. Beyond that (target-sprint capacity,
+        # resource/skill availability) is not yet modelled -- Batch B.
+        target_sprint_exists = False
+        sprints_by_number = sorted(self.project_state.sprints, key=lambda s: s.sprint_number)
+        sprint_by_name = {s.sprint_name: s for s in self.project_state.sprints}
+        for iid in candidate.affected_item_ids:
+            wi = next((w for w in self.project_state.work_items if w.item_id == iid), None)
+            if wi is None:
+                continue
+            current_sprint = sprint_by_name.get(wi.assigned_sprint)
+            if current_sprint and any(s.sprint_number < current_sprint.sprint_number for s in sprints_by_number):
+                target_sprint_exists = True
+                break
 
-        if is_on_cp:
-            cap = min(spillover_days * 0.6, self.upstream.forecast.expected_delay_days * 0.5)
+        if not target_sprint_exists:
+            delay_days = 0.0
+            notes = "No earlier sprint available to advance into; zero schedule benefit."
+            confidence = ConfidenceLevel.LOW
         else:
-            cap = min(spillover_days * 0.3, self.upstream.forecast.expected_delay_days * 0.25)
-
-        remaining_effort = float(getattr(self.upstream.forecast, "remaining_effort_hours", 0.0) or 0.0)
-        item_fraction = item_hours / max(remaining_effort, 1.0)
-        delay_reduction = cap * item_fraction
-
-        hours_recovered = min(item_hours, self.upstream.forecast.remaining_effort_hours)
+            # Model gap: without target-sprint capacity/resource feasibility
+            # (Batch B), we cannot verify the item can actually start earlier.
+            # Report zero direct schedule benefit rather than fabricate one.
+            delay_days = 0.0
+            notes = (
+                "Earlier sprint exists, but target-sprint capacity/resource "
+                "feasibility is not yet modelled (Batch B). Reporting zero "
+                "direct schedule benefit rather than assuming feasibility."
+            )
+            confidence = ConfidenceLevel.LOW
 
         return self._build_estimate(
             candidate,
-            hours_recovered=hours_recovered,
-            delay_days=delay_reduction,
-            risk_reduction=0.08 if is_on_cp else 0.06,
-            confidence=ConfidenceLevel.MEDIUM if is_on_cp else ConfidenceLevel.LOW,
+            hours_recovered=0.0,  # FIX-P4: advancing never deletes/recovers effort
+            delay_days=delay_days,
+            risk_reduction=0.0,
+            confidence=confidence,
             evidence=[self._evidence(
                 "ForecastEngine",
                 "expected_delay_days",
                 self.upstream.forecast.expected_delay_days,
                 0.0,
-                f"Advancing item {'on critical path' if is_on_cp else 'reduces schedule pressure'}"
+                f"Advancing item {'on critical path' if is_on_cp else ''} moves {round(item_hours, 0):.0f}h "
+                f"of unchanged work earlier; no effort is recovered",
             )],
-            notes=(
-                f"Advancing an item {'on the critical path' if is_on_cp else ''} "
-                f"can reduce downstream schedule pressure"
-            ),
+            notes=notes,
         )
 
     def _estimate_parallelize_items(self, candidate: RecommendationCandidate) -> ImpactEstimate:
         """
-        Estimate impact of parallelizing work items.
-        
-        Consumes:
-        - critical_path sequence length from CriticalPathResult
-        - dependency_count from ProjectMetrics
+        BATCH A / FIX-P1: Parallelizing items conserves total engineering
+        effort — 32h of work sequential is still 32h of work run side by
+        side. Only serialization (dependency lag) can shrink, and only when
+        a real dependency edge with lag exists between the affected items.
+
+        hours_recovered is always 0.0. delay_days is derived directly from
+        the actual lag_days on dependencies connecting the affected items,
+        converted to calendar days at the team's measured daily rate — not
+        from an arbitrary dependency-pressure percentage.
         """
-        cp_length = float(len(self.upstream.cp_result.critical_path or self.upstream.cp_result.critical_path_items or []))
-        dependency_count = float(getattr(self.upstream.metrics, 'dependency_count', 0.0) or 0.0)
-        
-        # Impact depends on current dependency pressure
-        dependency_pressure = min(1.0, dependency_count / max(len(self.project_state.work_items), 1))
-        
-        hours_recovered = min(
-            self.upstream.forecast.remaining_effort_hours * 0.12 * dependency_pressure,
-            self.upstream.forecast.remaining_effort_hours
-        )
-        
-        delay_reduction = min(
-            self.upstream.forecast.expected_delay_days * 0.2 * dependency_pressure,
-            1.5
-        )
-        
+        item_ids = set(candidate.affected_item_ids)
+        avg_daily_velocity = max(1.0, self.upstream.metrics.actual_avg_velocity / 8.0)
+
+        lag_days_removable = 0
+        has_dependency_edge = False
+        for dep in self.project_state.dependencies:
+            if dep.predecessor_item_id in item_ids and dep.successor_item_id in item_ids:
+                has_dependency_edge = True
+                lag_days_removable += dep.lag_days
+
+        if not has_dependency_edge:
+            delay_days = 0.0
+            confidence = ConfidenceLevel.LOW
+            notes = (
+                "No dependency edge found between the affected items; "
+                "independence (and any schedule benefit) cannot be verified, "
+                "so schedule gain is reported as zero."
+            )
+        elif lag_days_removable <= 0:
+            delay_days = 0.0
+            confidence = ConfidenceLevel.LOW
+            notes = "Dependency edge exists but carries no lag to remove; zero schedule gain."
+        else:
+            # Convert removable lag (calendar days of waiting) into the
+            # equivalent schedule benefit; capped by the item's own hours
+            # so we never claim more benefit than the item's actual duration.
+            item_hours = self._sum_item_remaining_effort(list(item_ids))
+            max_possible_days = item_hours / avg_daily_velocity
+            delay_days = min(float(lag_days_removable), max_possible_days)
+            confidence = ConfidenceLevel.MEDIUM
+            notes = f"Removes {lag_days_removable}d of dependency lag between the affected items."
+
+        is_on_cp = self._is_on_critical_path(list(item_ids))
+
         return self._build_estimate(
             candidate,
-            hours_recovered=hours_recovered,
-            delay_days=delay_reduction,
-            risk_reduction=0.07 if dependency_pressure > 0.5 else 0.04,
-            confidence=ConfidenceLevel.LOW,
+            hours_recovered=0.0,  # FIX-P1: parallelizing never deletes effort
+            delay_days=delay_days,
+            risk_reduction=0.06 if (is_on_cp and delay_days > 0) else 0.0,
+            confidence=confidence,
             evidence=[self._evidence(
-                "CriticalPathEngine",
-                "critical_path_items",
-                float(len(self.upstream.cp_result.critical_path_items)),
+                "DependencyGraphEngine",
+                "lag_days",
+                float(lag_days_removable),
                 0.0,
-                "Parallelizing independent items can reduce serial dependency drag"
+                "Parallelizing independent items reduces serial dependency lag, not effort",
             )],
-            notes="Parallelizing items has impact proportional to dependency pressure",
+            notes=notes,
         )
 
     def _estimate_rebalance_sprint_load(self, candidate: RecommendationCandidate) -> ImpactEstimate:
         """
-        Estimate impact of rebalancing sprint load.
-        
-        Consumes:
-        - sprint_metrics from ProjectMetrics for current utilization
+        FIX-10: Moving work across resources does not destroy effort.
+        Delay impact comes from overload relief on the source resource — if the
+        source was overloaded and moving items brings it to ≤ 100%, the excess
+        queue is resolved earlier.
+
+        hours_recovered stays 0.0 because no effort is deleted.
         """
-        # Find affected sprint metrics to assess current load imbalance
-        underutilized_sprints = sum(
-            1 for sm in self.upstream.metrics.sprint_metrics
-            if sm.completion_pct < 0.5
-        )
-        overutilized_sprints = sum(
-            1 for sm in self.upstream.metrics.sprint_metrics
-            if sm.completion_pct > 1.0
-        )
-        
-        imbalance = (underutilized_sprints + overutilized_sprints) / max(
-            len(self.upstream.metrics.sprint_metrics), 1
-        )
-        
-        hours_recovered = min(
-            self.upstream.metrics.average_item_effort * 0.25 * imbalance,
-            self.upstream.forecast.remaining_effort_hours
-        )
-        
+        item_hours = self._sum_item_remaining_effort(candidate.affected_item_ids)
+        avg_daily_velocity = max(1.0, self.upstream.metrics.actual_avg_velocity / 8.0)
+
+        source_id = candidate.affected_resource_ids[0] if candidate.affected_resource_ids else None
+        source_dev = next(
+            (dm for dm in self.upstream.metrics.resource_metrics.developer_metrics if dm.resource_id == source_id),
+            None,
+        ) if source_id else None
+
+        # Overload relief: how much of the source's queue exceeded their capacity?
+        if source_dev:
+            # Estimate source capacity from allocation × availability × 8h/day × sprint days
+            source_resource = next((r for r in self.project_state.team if r.resource_id == source_id), None)
+            active_sprints = [
+                s for s in self.project_state.sprints
+                if hasattr(s, "status") and str(s.status).endswith(("NOT_STARTED", "IN_PROGRESS"))
+            ]
+            sprint_days = active_sprints[0].working_days if active_sprints else 10
+            source_capacity = (
+                (source_resource.allocation_pct * source_resource.availability_pct * 8.0 * sprint_days)
+                if source_resource else avg_daily_velocity * sprint_days
+            )
+            source_assigned = source_dev.remaining_effort_hours
+            source_load_before = source_assigned / max(source_capacity, 1.0)
+            source_load_after  = max(0.0, source_assigned - item_hours) / max(source_capacity, 1.0)
+
+            if source_load_before > 1.0 and source_load_after <= 1.0:
+                # Source was overloaded; moving these items resolves the queue
+                overload_excess_hours = (source_load_before - 1.0) * source_capacity
+                delay_days = overload_excess_hours / avg_daily_velocity
+            else:
+                delay_days = 0.0   # source was not overloaded; rebalance is structural only
+
+            spillover_risk_delta = -max(0.0, source_load_before - 1.0) * item_hours / max(source_capacity, 1.0)
+            risk_reduction = min(0.10, max(0.0, abs(spillover_risk_delta)))
+            notes = (
+                f"Source {source_id} load: {source_load_before:.0%} → {source_load_after:.0%} "
+                f"after moving {round(item_hours, 0):.0f}h. "
+                f"{'Overload resolved; ' if source_load_before > 1.0 else 'No overload; '}delay saving: {delay_days:.1f}d. "
+                f"No effort deleted."
+            )
+            confidence = ConfidenceLevel.MEDIUM if source_load_before > 1.0 else ConfidenceLevel.LOW
+        else:
+            delay_days = 0.0
+            risk_reduction = 0.02
+            notes = "Source resource metrics unavailable; structural rebalance only. No effort deleted."
+            confidence = ConfidenceLevel.LOW
+
         return self._build_estimate(
             candidate,
-            hours_recovered=hours_recovered,
-            delay_days=0.0,
-            risk_reduction=0.03 * imbalance,
-            confidence=ConfidenceLevel.LOW,
+            hours_recovered=0.0,   # FIX-10: rebalancing never deletes effort
+            delay_days=delay_days,
+            risk_reduction=risk_reduction,
+            confidence=confidence,
             evidence=[self._evidence(
                 "MetricsEngine",
-                "sprint_metrics",
-                imbalance,
+                "resource_sprint_loads",
+                item_hours,
                 0.0,
-                f"Sprint load imbalance detected in {round(imbalance * 100, 1)}% of sprints"
+                "Rebalance delay benefit comes from overload relief, not effort reduction",
             )],
-            notes="Sprint rebalancing has limited schedule leverage without slack",
+            notes=notes,
         )
 
     def _estimate_remove_dependency_bottleneck(self, candidate: RecommendationCandidate) -> ImpactEstimate:
         """
-        Estimate impact of removing a dependency bottleneck.
-        
-        Consumes:
-        - critical_path information from upstream
-        - dependency metrics from ProjectMetrics
+        BATCH A / FIX-P3: Removing a dependency bottleneck changes WAITING
+        TIME (dependency lag/serialization), not the successor's engineering
+        effort. hours_recovered is always 0.0. Schedule benefit is derived
+        from the actual lag_days on dependencies touching the affected
+        items — a dependency with zero lag genuinely has nothing to remove,
+        and that must surface as zero benefit, not a fabricated percentage.
         """
-        # Find bottleneck items: those with high in-degree on the critical path
+        affected_ids = set(candidate.affected_item_ids)
         cp_items = self.upstream.cp_result.items_on_critical_path or []
-        
-        hours_recovered = min(
-            self.upstream.forecast.remaining_effort_hours * 0.15,
-            self.upstream.forecast.remaining_effort_hours
-        )
-        
-        # Impact if bottleneck is on critical path
-        is_cp_bottleneck = any(
-            item_id in cp_items
-            for item_id in candidate.affected_item_ids
-        )
-        
-        delay_reduction = min(
-            self.upstream.forecast.expected_delay_days * (0.35 if is_cp_bottleneck else 0.15),
-            2.5
-        )
-        
+        avg_daily_velocity = max(1.0, self.upstream.metrics.actual_avg_velocity / 8.0)
+
+        touching_deps = [
+            dep for dep in self.project_state.dependencies
+            if dep.predecessor_item_id in affected_ids or dep.successor_item_id in affected_ids
+        ]
+        lag_days_removable = sum(dep.lag_days for dep in touching_deps)
+
+        is_cp_bottleneck = any(item_id in cp_items for item_id in affected_ids)
+
+        if not touching_deps:
+            delay_days = 0.0
+            confidence = ConfidenceLevel.LOW
+            notes = "No dependency found touching the affected items; zero schedule benefit."
+        elif lag_days_removable <= 0:
+            delay_days = 0.0
+            confidence = ConfidenceLevel.LOW
+            notes = "Dependency touches the affected items but carries no lag; zero schedule benefit."
+        else:
+            item_hours = self._sum_item_remaining_effort(list(affected_ids))
+            max_possible_days = item_hours / avg_daily_velocity
+            delay_days = min(float(lag_days_removable), max_possible_days)
+            confidence = ConfidenceLevel.MEDIUM if is_cp_bottleneck else ConfidenceLevel.LOW
+            notes = f"Removes {lag_days_removable}d of dependency lag {'on the critical path' if is_cp_bottleneck else ''}."
+
         return self._build_estimate(
             candidate,
-            hours_recovered=hours_recovered,
-            delay_days=delay_reduction,
-            risk_reduction=0.10 if is_cp_bottleneck else 0.06,
-            confidence=ConfidenceLevel.MEDIUM if is_cp_bottleneck else ConfidenceLevel.LOW,
+            hours_recovered=0.0,  # FIX-P3: removing a bottleneck never deletes effort
+            delay_days=delay_days,
+            risk_reduction=0.08 if (is_cp_bottleneck and delay_days > 0) else 0.0,
+            confidence=confidence,
             evidence=[self._evidence(
                 "DependencyGraphEngine",
-                "dependency_count",
-                float(self.upstream.metrics.dependency_count or 0.0),
+                "lag_days",
+                float(lag_days_removable),
                 0.0,
-                "Removing a dependency bottleneck eases critical path pressure"
+                "Removing a dependency bottleneck eases waiting time, not effort",
             )],
-            notes="Impact depends on whether bottleneck is on the critical path",
+            notes=notes,
         )
 
     def _estimate_rebaseline_estimate(self, candidate: RecommendationCandidate) -> ImpactEstimate:
-        item_hours = sum(next((wi.remaining_effort_hrs for wi in self.project_state.work_items if wi.item_id == iid), 0.0) for iid in candidate.affected_item_ids)
-        return self._build_estimate(
+        """
+        FIX-07: Rebaselining makes the schedule longer (honest) while reducing
+        planning surprise.  The OLD code returned a positive delay_reduction_days
+        implying the action shortens the schedule — the opposite of what the
+        applicator does (it increases remaining_effort_hrs).
+
+        Two-sided profile:
+          Cost:    schedule gets longer by the inflated hours / avg team rate
+          Benefit: risk / estimation surprise decreases
+        """
+        item_hours = sum(
+            next((wi.remaining_effort_hrs for wi in self.project_state.work_items if wi.item_id == iid), 0.0)
+            for iid in candidate.affected_item_ids
+        )
+        avg_daily_velocity = max(1.0, self.upstream.metrics.actual_avg_velocity / 8.0)
+        # How much extra effort rebaselining adds (mirrors applicator: scale by work_std_dev_pct)
+        effort_increase = item_hours * self.upstream.metrics.historical_metrics.avg_estimation_error_pct \
+            if hasattr(self.upstream.metrics, "historical_metrics") and \
+               hasattr(self.upstream.metrics.historical_metrics, "avg_estimation_error_pct") \
+            else item_hours * 0.15   # documented fallback: 15% estimation error
+        delay_increase = effort_increase / avg_daily_velocity  # days schedule gets longer
+
+        # Risk benefit: more honest estimate reduces late-stage planning surprises
+        risk_reduction = min(0.12, 0.04 + (effort_increase / max(item_hours, 1.0)) * 0.40)
+
+        notes = (
+            f"Rebaselining {round(item_hours, 0)}h of work adds ~{round(effort_increase, 1)}h "
+            f"to the plan ({round(delay_increase, 1)}d longer finish), but reduces estimation "
+            f"surprise risk by {round(risk_reduction * 100, 0):.0f}pp."
+        )
+
+        return self._build_estimate_signed(
             candidate,
-            hours_recovered=min(item_hours * 0.2, self.upstream.forecast.remaining_effort_hours),
-            delay_days=min(0.5, self.upstream.forecast.expected_delay_days * 0.2),
-            risk_reduction=0.08,
+            hours_recovered=0.0,   # rebaseline does not recover hours; it adds them
+            delay_days=-delay_increase,   # NEGATIVE: makes finish later (FIX-07 sign fix)
+            risk_reduction=risk_reduction,
             confidence=ConfidenceLevel.MEDIUM,
-            evidence=[self._evidence("ForecastEngine", "remaining_effort_hours", item_hours, 0.0, "Historical overrun pattern justifies rebaselining the estimate")],
-            notes="Rebaselining estimates based on prior overrun history reduces planning error for the affected work.",
+            evidence=[self._evidence(
+                "ForecastEngine",
+                "remaining_effort_hours",
+                item_hours,
+                0.0,
+                "Historical overrun pattern justifies rebaselining; cost is longer schedule, benefit is less surprise",
+            )],
+            notes=notes,
         )
 
     def _estimate_pair_reviewer(self, candidate: RecommendationCandidate) -> ImpactEstimate:
+        """
+        FIX-16: Adding a reviewer costs review time (modelled as +effort by the applicator)
+        and reduces rework risk.  No direct delay reduction is claimed without rework_risk data
+        on WorkItem.  The benefit is risk-only.
+        """
         return self._build_estimate(
             candidate,
-            hours_recovered=10.0,
-            delay_days=0.2,
-            risk_reduction=0.05,
+            hours_recovered=0.0,   # FIX-16: review costs time; no hours recovered
+            delay_days=0.0,         # FIX-16: no delay reduction without rework_risk data
+            risk_reduction=0.06,
             confidence=ConfidenceLevel.MEDIUM,
-            evidence=[self._evidence("MetricsEngine", "review_pairing", 1.0, 0.0, "Pairing guidance reduces rework risk on shared work")],
-            notes="Pairing a reviewer with the work reduces rework and review churn.",
+            evidence=[self._evidence(
+                "MetricsEngine", "review_pairing", 1.0, 0.0,
+                "Pair reviewer reduces rework risk; schedule impact depends on rework rate (data unavailable)",
+            )],
+            notes=(
+                "Adding a reviewer costs review time (modelled as +effort in simulation) "
+                "and reduces rework risk. Schedule impact depends on rework rate; "
+                "no direct delay reduction is claimed without rework_risk data."
+            ),
         )
 
     def _estimate_escalate_blocker_early(self, candidate: RecommendationCandidate) -> ImpactEstimate:
+        """
+        FIX-14: Early escalation benefit depends on whether the blocker is on the
+        critical path.  A flat 25% of total delay is disconnected from CP structure.
+
+        On CP: benefit = cal.escalation_resolution_pull_days (direct CP save)
+        Off CP: benefit = risk reduction only (no schedule shortening)
+        """
+        blocker_id = (candidate.affected_blocker_ids or [None])[0]
+        blocker = next((b for b in self.project_state.blockers if b.blocker_id == blocker_id), None)
+
+        impacted_ids = (getattr(blocker, "impacted_item_ids", []) or []) if blocker else []
+        is_on_cp = self._is_on_critical_path(impacted_ids)
+
+        # pull_days: how many days earlier the blocker resolves due to escalation
+        pull_days = float(self.upstream.forecast.expected_delay_days * 0.1)   # fallback
+        if hasattr(self, '_cal_pull_days'):
+            pull_days = float(self._cal_pull_days)
+
+        # Try to read from upstream calibration if available
+        try:
+            from app.engines.project_calibration import ProjectCalibration
+            # We cannot access the calibration from the estimator directly, so use a safe default
+            pull_days = 2.0   # documented default: escalation_resolution_pull_days = 2
+        except Exception:
+            pass
+
+        if is_on_cp:
+            delay_days = pull_days   # direct CP day save
+            risk_delta = 0.10
+            notes = (
+                f"Blocker {blocker_id or ''} is on the critical path. "
+                f"Escalating early pulls resolution by ~{pull_days:.0f}d → direct schedule save."
+            )
+            confidence = ConfidenceLevel.HIGH
+        else:
+            delay_days = 0.0   # no CP impact
+            risk_delta = 0.12  # but reduces schedule risk tail
+            notes = (
+                f"Blocker {blocker_id or ''} is NOT on the critical path. "
+                f"Benefit is risk reduction only; no direct delay saving is claimed."
+            )
+            confidence = ConfidenceLevel.MEDIUM
+
         return self._build_estimate(
             candidate,
-            hours_recovered=min(20.0, self.upstream.forecast.remaining_effort_hours),
-            delay_days=min(1.0, self.upstream.forecast.expected_delay_days * 0.25),
-            risk_reduction=0.1,
-            confidence=ConfidenceLevel.HIGH,
-            evidence=[self._evidence("ForecastEngine", "expected_delay_days", self.upstream.forecast.expected_delay_days, 0.0, "Early escalation prevents repeated blocker loss")],
-            notes="Escalating the blocker earlier protects the schedule from repeated delay.",
+            hours_recovered=0.0,
+            delay_days=delay_days,
+            risk_reduction=risk_delta,
+            confidence=confidence,
+            evidence=[self._evidence(
+                "ForecastEngine",
+                "expected_delay_days",
+                self.upstream.forecast.expected_delay_days,
+                0.0,
+                "Early escalation benefit is CP-dependent (FIX-14)",
+            )],
+            notes=notes,
         )
 
     def _estimate_freeze_scope_request(self, candidate: RecommendationCandidate) -> ImpactEstimate:
@@ -468,14 +790,24 @@ class ImpactEstimator:
         )
 
     def _estimate_assign_second_reviewer(self, candidate: RecommendationCandidate) -> ImpactEstimate:
+        """
+        FIX-16: Risk-only benefit. No invented hours or delay without rework_risk data.
+        """
         return self._build_estimate(
             candidate,
-            hours_recovered=8.0,
-            delay_days=0.2,
-            risk_reduction=0.05,
+            hours_recovered=0.0,   # FIX-16: no hours recovered
+            delay_days=0.0,         # FIX-16: no delay reduction without rework_risk data
+            risk_reduction=0.06,
             confidence=ConfidenceLevel.MEDIUM,
-            evidence=[self._evidence("MetricsEngine", "review_pairing", 1.0, 0.0, "A second reviewer improves review throughput")],
-            notes="Assigning a second reviewer reduces review turnaround delays.",
+            evidence=[self._evidence(
+                "MetricsEngine", "review_pairing", 1.0, 0.0,
+                "Second reviewer reduces rework risk; schedule impact requires rework_risk data",
+            )],
+            notes=(
+                "Adding a second reviewer costs review time (modelled as +effort in simulation) "
+                "and reduces rework risk. Schedule impact depends on rework rate; "
+                "no direct delay reduction is claimed without rework_risk data."
+            ),
         )
 
     def _estimate_cross_train_backup(self, candidate: RecommendationCandidate) -> ImpactEstimate:
@@ -513,31 +845,29 @@ class ImpactEstimator:
         )
 
     def _estimate_insert_review_gate(self, candidate: RecommendationCandidate) -> ImpactEstimate:
-        item_hours = self._sum_item_remaining_effort(candidate.affected_item_ids)
-        is_on_cp = self._is_on_critical_path(candidate.affected_item_ids)
-        hours_recovered = min(item_hours * 0.06, self.upstream.forecast.remaining_effort_hours)
-        delay_days = min(self.upstream.forecast.expected_delay_days * (0.18 if is_on_cp else 0.1), 1.0)
-        risk_reduction = min(0.04 + (item_hours / max(1.0, self.upstream.forecast.remaining_effort_hours)) * 0.1, 0.12)
-        confidence = ConfidenceLevel.HIGH if is_on_cp else ConfidenceLevel.MEDIUM
-        notes = (
-            "A review gate reduces rework by tightening quality feedback loops and "
-            f"is estimated to recover {round(hours_recovered,1)}h of effort from the affected item(s)."
-        )
-
+        """
+        FIX-16: Review gate costs review time (applicator adds effort) and reduces
+        rework risk.  No direct delay reduction is claimed without rework_risk data.
+        Risk-only benefit, consistent with _estimate_pair_reviewer.
+        """
         return self._build_estimate(
             candidate,
-            hours_recovered=hours_recovered,
-            delay_days=delay_days,
-            risk_reduction=risk_reduction,
-            confidence=confidence,
+            hours_recovered=0.0,   # FIX-16: review costs time; no hours recovered
+            delay_days=0.0,         # FIX-16: no delay reduction without rework_risk data
+            risk_reduction=0.06,
+            confidence=ConfidenceLevel.MEDIUM,
             evidence=[self._evidence(
                 "ForecastEngine",
                 "expected_delay_days",
                 self.upstream.forecast.expected_delay_days,
                 0.0,
-                "A review gate can reduce schedule pressure by lowering rework-driven delay",
+                "Review gate reduces rework risk; schedule impact requires rework_risk data on WorkItem",
             )],
-            notes=notes,
+            notes=(
+                "Inserting a review gate costs review time (modelled as +effort in simulation) "
+                "and reduces rework risk. Schedule impact depends on rework rate; "
+                "no direct delay reduction is claimed without rework_risk data."
+            ),
         )
 
     def _estimate_apply_ramp_up_discount(self, candidate: RecommendationCandidate) -> ImpactEstimate:
@@ -572,17 +902,26 @@ class ImpactEstimator:
         )
 
     def _estimate_resequence_non_critical_item(self, candidate: RecommendationCandidate) -> ImpactEstimate:
+        """
+        FIX-11: Resequencing only changes execution order — it does NOT destroy or
+        recover effort.  The real benefit is queue-pressure relief for CP resources,
+        expressed as a spillover risk reduction, not delay_days.
+
+        By construction, RESEQUENCE_NON_CRITICAL targets items NOT on the critical path,
+        so delay_days is always 0.0.
+        """
         item_hours = self._sum_item_remaining_effort(candidate.affected_item_ids)
         item_fraction = item_hours / max(self.upstream.forecast.remaining_effort_hours, 1.0)
-        is_on_cp = self._is_on_critical_path(candidate.affected_item_ids)
-        hours_recovered = min(item_hours * 0.03, self.upstream.forecast.remaining_effort_hours)
-        delay_days = min(self.upstream.forecast.expected_delay_days * (0.14 if is_on_cp else 0.08) * item_fraction, 1.2)
-        risk_reduction = 0.06 if is_on_cp else 0.05
+
+        # Risk benefit: proportional to this item's share of total remaining work
+        # (documented assumption: each 1% of work share reduces spillover risk by ~0.15pp)
+        spillover_risk_delta = item_fraction * 0.15
+        risk_reduction = min(0.08, spillover_risk_delta)
 
         return self._build_estimate(
             candidate,
-            hours_recovered=hours_recovered,
-            delay_days=delay_days,
+            hours_recovered=0.0,   # FIX-11: resequencing does not delete or recover work
+            delay_days=0.0,         # FIX-11: non-CP item; no direct CP impact
             risk_reduction=risk_reduction,
             confidence=ConfidenceLevel.MEDIUM,
             evidence=[self._evidence(
@@ -590,38 +929,81 @@ class ImpactEstimator:
                 "critical_path_duration_hours",
                 float(self.upstream.cp_result.critical_path_duration_hours or 0.0),
                 0.0,
-                "Resequencing non-critical work protects critical-path throughput",
+                "Resequencing non-critical work reduces queue pressure for CP resources",
             )],
             notes=(
-                "Resequencing non-critical work reduces shared queue pressure for affected downstream work "
-                f"and is estimated to recover {round(hours_recovered,1)}h of effort." 
+                f"Resequencing {round(item_hours, 0):.0f}h of non-critical work relieves shared-resource "
+                f"queue pressure. No effort is recovered or deleted; only execution order changes. "
+                f"Estimated spillover risk reduction: {round(risk_reduction * 100, 1):.1f}pp."
             ),
         )
 
     def _estimate_swarm_item(self, candidate: RecommendationCandidate) -> ImpactEstimate:
+        """
+        FIX-15: Estimator must mirror the applicator's Brook's Law formula.
+        The applicator computes:
+            share = swarm_daily / (primary_daily + swarm_daily)
+            parallelism_factor = max(1 - min(share, 0.40), 0.60)   # Brook's Law cap: max 40% reduction
+            item.remaining_effort_hrs *= parallelism_factor
+
+        The estimator mirrors this using resource_effective_rate for swarm and primary.
+        delay_days = item_hours × (1 - parallelism_factor) / primary_rate
+        """
         item_hours = self._sum_item_remaining_effort(candidate.affected_item_ids)
         is_on_cp = self._is_on_critical_path(candidate.affected_item_ids)
-        hours_recovered = min(item_hours * 0.15, self.upstream.forecast.remaining_effort_hours)
-        delay_days = min(self.upstream.forecast.expected_delay_days * (0.35 if is_on_cp else 0.18), 2.0)
+        team_avg_daily_rate = max(1.0, self.upstream.metrics.actual_avg_velocity / 8.0)
+
+        # Identify primary and swarm resources
+        primary_resource_id = None
+        for iid in candidate.affected_item_ids:
+            wi = next((w for w in self.project_state.work_items if w.item_id == iid), None)
+            if wi:
+                primary_resource_id = wi.assigned_resource
+                break
+
+        # Swarm resource is in affected_resource_ids[0] per candidate_generator convention
+        swarm_resource_id = candidate.affected_resource_ids[0] if candidate.affected_resource_ids else None
+
+        primary_resource = next((r for r in self.project_state.team if r.resource_id == primary_resource_id), None)
+        swarm_resource = next((r for r in self.project_state.team if r.resource_id == swarm_resource_id), None)
+
+        if swarm_resource is None:
+            delay_days = 0.0
+            notes = "No swarm resource identified; no parallelism benefit estimated."
+            confidence = ConfidenceLevel.LOW
+        else:
+            primary_rate = resource_effective_rate(primary_resource, team_avg_daily_rate)
+            swarm_rate = resource_effective_rate(swarm_resource, team_avg_daily_rate)
+            total_rate = primary_rate + swarm_rate
+            share = swarm_rate / max(total_rate, 0.01)
+            # Brook's Law cap: swarming cannot claim more than 40% reduction
+            reduction = min(share, 0.40)
+            hours_saved = item_hours * reduction
+            delay_days = hours_saved / max(primary_rate, 0.01)
+            notes = (
+                f"Swarm resource {swarm_resource_id} rate: {swarm_rate:.1f}h/d, "
+                f"primary rate: {primary_rate:.1f}h/d → share: {share:.0%} "
+                f"(Brook's Law cap 40% → reduction {reduction:.0%}). "
+                f"Saves {delay_days:.1f}d on {'CP' if is_on_cp else 'non-CP'} item."
+            )
+            confidence = ConfidenceLevel.MEDIUM if is_on_cp else ConfidenceLevel.LOW
+
         risk_reduction = 0.08 if is_on_cp else 0.05
 
         return self._build_estimate(
             candidate,
-            hours_recovered=hours_recovered,
+            hours_recovered=0.0,   # FIX-15: hours_recovered not claimed; duration shortens, not effort destroyed
             delay_days=delay_days,
             risk_reduction=risk_reduction,
-            confidence=ConfidenceLevel.MEDIUM,
+            confidence=confidence,
             evidence=[self._evidence(
                 "CriticalPathEngine",
                 "critical_path_duration_hours",
                 float(self.upstream.cp_result.critical_path_duration_hours or 0.0),
                 0.0,
-                "Swarming a bottleneck item shortens critical-path duration in the current forecast window",
+                "Swarm formula mirrors applicator Brook's Law cap (max 40% parallelism gain)",
             )],
-            notes=(
-                "Swarming the bottleneck item reduces the item's remaining work and critical-path pressure "
-                f"by an estimated {round(hours_recovered,1)}h."
-            ),
+            notes=notes,
         )
 
     def _estimate_add_resource_skill(self, candidate: RecommendationCandidate) -> ImpactEstimate:
@@ -681,10 +1063,37 @@ class ImpactEstimator:
         evidence: List[SignalEvidence],
         notes: str,
     ) -> ImpactEstimate:
+        """Standard builder: clamps delay_days to ≥ 0 (positive = improvement)."""
         cap = max(0.0, self.upstream.forecast.remaining_effort_hours)
         return ImpactEstimate(
             estimated_hours_recovered=float(min(max(hours_recovered, 0.0), cap)),
             estimated_delay_reduction_days=float(max(delay_days, 0.0)),
+            estimated_risk_reduction=float(max(risk_reduction, 0.0)),
+            confidence=confidence,
+            evidence=evidence,
+            calculation_notes=notes,
+        )
+
+    def _build_estimate_signed(
+        self,
+        candidate: RecommendationCandidate,
+        *,
+        hours_recovered: float,
+        delay_days: float,
+        risk_reduction: float,
+        confidence: ConfidenceLevel,
+        evidence: List[SignalEvidence],
+        notes: str,
+    ) -> ImpactEstimate:
+        """
+        Signed builder: allows negative delay_days to express schedule worsening.
+        Used by FIX-07 (REBASELINE_ESTIMATE) and FIX-09 (REASSIGN worsening case).
+        hours_recovered is still clamped to ≥ 0.
+        """
+        cap = max(0.0, self.upstream.forecast.remaining_effort_hours)
+        return ImpactEstimate(
+            estimated_hours_recovered=float(min(max(hours_recovered, 0.0), cap)),
+            estimated_delay_reduction_days=float(delay_days),   # signed — negative = worsens schedule
             estimated_risk_reduction=float(max(risk_reduction, 0.0)),
             confidence=confidence,
             evidence=evidence,

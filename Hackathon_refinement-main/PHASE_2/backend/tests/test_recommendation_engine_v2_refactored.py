@@ -299,7 +299,17 @@ class TestSignalDetectorConsumption:
         assert found.context.get("load_ratio") == expected, "Context load_ratio should match metrics.resource_sprint_loads rounded to 4 decimals"
 
     def test_estimate_reassign_item_delay_days_is_not_zero(self):
-        """Verify `_estimate_reassign_item` uses the affected item's hours to produce a non-zero delay estimate."""
+        """
+        BATCH A (stale-test update): the old version asserted an unconditional
+        positive delay reduction using an unsigned "item_hours / velocity"
+        formula, independent of which resource the work moved to or from.
+        FIX-09 replaced that with a signed estimate driven by each resource's
+        effective delivery rate: reassigning to a slower resource must cost
+        schedule (negative delay_days), not manufacture savings. In this
+        fixture dev1 is SENIOR and dev2 is MID, so reassigning wi1 from dev1
+        to dev2 is a genuine downgrade and should show a *negative*
+        delay_days -- while effort itself is never deleted.
+        """
         project_state = self._create_sample_project_state()
         metrics = MetricsEngine(project_state).calculate()
         dag = DependencyGraphEngine(project_state).build_dag()
@@ -338,14 +348,23 @@ class TestSignalDetectorConsumption:
 
         estimate = ImpactEstimator(project_state, upstream).estimate(candidate)
 
-        item_hours = next(w for w in project_state.work_items if w.item_id == "wi1").remaining_effort_hrs
-        expected_delay_days = max(0.0, min(item_hours / max(1.0, metrics.actual_avg_velocity / 8.0), forecast.expected_delay_days))
-
-        assert estimate.estimated_delay_reduction_days == expected_delay_days
-        assert estimate.estimated_delay_reduction_days > 0.0
+        # Effort is never deleted by reassignment.
+        assert estimate.estimated_hours_recovered == 0.0
+        # dev1 (SENIOR) -> dev2 (MID) is a genuine downgrade in effective
+        # rate, so the honest estimate is a negative delay (schedule cost),
+        # not a fabricated positive recovery.
+        assert estimate.estimated_delay_reduction_days != 0.0
+        assert estimate.estimated_delay_reduction_days < 0.0
 
     def test_estimate_reassign_item_with_realistic_forecast_values(self):
-        """Verify `_estimate_reassign_item` uses realistic patched forecast values in the output summary."""
+        """
+        BATCH A (stale-test update): the old version asserted
+        hours_recovered == 16.0 -- i.e. that reassigning an item deletes its
+        entire remaining effort. FIX-09 conserves effort unconditionally
+        (hours_recovered is always 0.0) and derives delay_days from the
+        signed source/receiver rate difference instead of a flat
+        item_hours / velocity formula.
+        """
         project_state = self._create_sample_project_state()
         wi1 = next(w for w in project_state.work_items if w.item_id == "wi1")
         wi1.remaining_effort_hrs = 16.0
@@ -388,13 +407,13 @@ class TestSignalDetectorConsumption:
 
         estimate = ImpactEstimator(project_state, upstream).estimate(candidate)
 
-        expected_delay_days = min(16.0 / max(1.0, metrics.actual_avg_velocity / 8.0), forecast.expected_delay_days)
-
-        assert estimate.estimated_hours_recovered == 16.0
-        assert estimate.estimated_delay_reduction_days == expected_delay_days
-        assert estimate.estimated_risk_reduction == min(0.05 + (16.0 / 80.0) * 0.2, 0.25)
-        assert estimate.confidence == "HIGH"
-        assert "Moving 16.0h of work" in estimate.calculation_notes
+        # FIX-09: reassignment never deletes/recovers effort.
+        assert estimate.estimated_hours_recovered == 0.0
+        # dev1 (SENIOR) -> dev2 (MID): a downgrade, so delay_days is negative
+        # (schedule cost), and risk_reduction is 0 since delay_days <= 0.
+        assert estimate.estimated_delay_reduction_days < 0.0
+        assert estimate.estimated_risk_reduction == 0.0
+        assert "Receiver rate" in estimate.calculation_notes
 
     def test_estimate_resolve_blocker_uses_specific_blocker_weighting(self):
         """Verify `_estimate_resolve_blocker` uses severity-based weighting for the specific blocker, not a simple pro-rata split."""
@@ -603,13 +622,21 @@ class TestSignalDetectorConsumption:
         assert estimate.estimated_delay_reduction_days > expected_without_multiplier
 
     def test_estimate_advance_item_no_hardcap(self):
-        """Verify `_estimate_advance_item` no longer caps delay_reduction at fixed values."""
+        """
+        BATCH A / FIX-P4 (stale-test update): the old version of this test
+        asserted the exact forbidden semantics Batch A removed -- treating
+        spillover-days * item-fraction as a positive, uncapped schedule
+        benefit for ADVANCE_ITEM_TO_EARLIER_SPRINT. Moving an item to an
+        earlier sprint does not shrink its remaining work, and this
+        estimator cannot yet verify target-sprint capacity/resource
+        feasibility (that lands in Batch B) -- so the only honest estimate
+        today is hours_recovered == 0.0 and delay_days == 0.0, regardless
+        of critical-path membership, spillover, or item size.
+        """
         project_state = self._create_sample_project_state()
-        # ensure wi1 has some remaining hours
         wi1 = next(w for w in project_state.work_items if w.item_id == "wi1")
         wi1.remaining_effort_hrs = 10.0
 
-        # Build upstream pieces
         metrics = MetricsEngine(project_state).calculate()
         dag = DependencyGraphEngine(project_state).build_dag()
         cp_result = CriticalPathEngine(project_state, dag).analyze()
@@ -621,7 +648,6 @@ class TestSignalDetectorConsumption:
             project_state, metrics, cp_result, dag, spillover, forecast, monte_carlo, impact_scores
         ).analyze()
 
-        # Tweak forecast to a large expected_delay and meaningful spillover
         forecast.expected_delay_days = 20.0
         forecast.remaining_effort_hours = 100.0
         forecast.delay_breakdown = SimpleNamespace(remaining_days_spillover=10.0)
@@ -642,7 +668,8 @@ class TestSignalDetectorConsumption:
 
         est = ImpactEstimator(project_state, upstream)
 
-        # Case A: item on CP -> cap = min(spillover*0.6, expected*0.5) = min(6,10)=6
+        # On critical path: still zero hours_recovered / zero delay_days --
+        # CP membership alone does not establish target-sprint feasibility.
         cp_result.items_on_critical_path = ["wi1"]
         candidate_cp = RecommendationCandidate(
             recommendation_id="c-advance-cp",
@@ -656,13 +683,10 @@ class TestSignalDetectorConsumption:
             root_cause_signal_id="",
         )
         impact_cp = est.estimate(candidate_cp)
-        cap_cp = min(10.0 * 0.6, 20.0 * 0.5)
-        item_fraction = 10.0 / max(100.0, 1.0)
-        expected_cp = cap_cp * item_fraction
-        assert impact_cp.estimated_delay_reduction_days == expected_cp
-        assert impact_cp.estimated_delay_reduction_days != 3.0
+        assert impact_cp.estimated_hours_recovered == 0.0
+        assert impact_cp.estimated_delay_reduction_days == 0.0
 
-        # Case B: item not on CP -> previous cap was 2.0; new should be min(spillover*0.3, expected*0.25) = min(3,5)=3
+        # Not on critical path: same zero-benefit result.
         cp_result.items_on_critical_path = []
         candidate_non = RecommendationCandidate(
             recommendation_id="c-advance-non",
@@ -676,13 +700,11 @@ class TestSignalDetectorConsumption:
             root_cause_signal_id="",
         )
         impact_non = est.estimate(candidate_non)
-        cap_non = min(10.0 * 0.3, 20.0 * 0.25)
-        expected_non = cap_non * item_fraction
-        assert impact_non.estimated_delay_reduction_days == expected_non
-        assert impact_non.estimated_delay_reduction_days != 2.0
+        assert impact_non.estimated_hours_recovered == 0.0
+        assert impact_non.estimated_delay_reduction_days == 0.0
 
-        # Case C: two candidates with different item hours (both on CP) should produce different delay reductions
-        # add a big item to project state
+        # Item size must not change the (zero) result either -- a bigger
+        # item moved earlier still doesn't have its effort deleted.
         big_item = type(wi1)(**{
             'item_id': 'wi_big',
             'title': 'Big Feature',
@@ -698,21 +720,6 @@ class TestSignalDetectorConsumption:
         })
         project_state.work_items.append(big_item)
 
-        # Put both items on critical path
-        cp_result.items_on_critical_path = ["wi1", "wi_big"]
-
-        candidate_small = RecommendationCandidate(
-            recommendation_id="c-small",
-            action_type=RecommendationAction.ADVANCE_ITEM_TO_EARLIER_SPRINT,
-            title="advance-small",
-            description="",
-            affected_item_ids=["wi1"],
-            affected_resource_ids=[],
-            affected_sprint_ids=[],
-            affected_blocker_ids=[],
-            root_cause_signal_id="",
-        )
-
         candidate_big = RecommendationCandidate(
             recommendation_id="c-big",
             action_type=RecommendationAction.ADVANCE_ITEM_TO_EARLIER_SPRINT,
@@ -724,13 +731,9 @@ class TestSignalDetectorConsumption:
             affected_blocker_ids=[],
             root_cause_signal_id="",
         )
-
-        impact_small = est.estimate(candidate_small)
         impact_big = est.estimate(candidate_big)
-
-        assert impact_big.estimated_delay_reduction_days > impact_small.estimated_delay_reduction_days, (
-            f"Expected bigger item to yield larger delay_reduction (got {impact_big.estimated_delay_reduction_days} <= {impact_small.estimated_delay_reduction_days})"
-        )
+        assert impact_big.estimated_hours_recovered == 0.0
+        assert impact_big.estimated_delay_reduction_days == 0.0
 
     def test_sprint_detector_consumes_from_sprint_metrics(self):
         """Test that SprintDetector uses sprint_metrics instead of recalculating."""

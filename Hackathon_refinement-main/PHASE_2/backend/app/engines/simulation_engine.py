@@ -1151,70 +1151,92 @@ class ActionApplicatorV2:
             item.assigned_sprint = target_sprint.sprint_name
 
     def _apply_parallelize_items(self, state: ProjectState, rec: Recommendation) -> None:
+        # BATCH A / FIX-P1: Parallelizing items changes SERIALIZATION, not
+        # ENGINEERING EFFORT. Two items that together require 32h of work
+        # still require 32h of work when run side by side — only the
+        # elapsed/critical-path duration can shrink, and only when the items
+        # are genuinely independent (or their dependency lag can be
+        # collapsed). Effort fields (current_estimate_hrs / remaining_effort_hrs)
+        # are never touched here.
         item_ids = set(rec.affected_item_ids)
-        dep_mutated = False
+
         for dep in state.dependencies:
             if dep.predecessor_item_id in item_ids and dep.successor_item_id in item_ids:
-                if dep.lag_days > 0:
-                    cut = max(1, round(dep.lag_days * self._cal.split_effort_reduction))
-                    dep.lag_days = max(0, dep.lag_days - cut)
-                for item in state.work_items:
-                    if item.item_id == dep.successor_item_id:
-                        reduction = item.current_estimate_hrs * self._cal.split_effort_reduction
-                        item.current_estimate_hrs = max(1.0, item.current_estimate_hrs - reduction)
-                        item.remaining_effort_hrs = max(0.0, item.remaining_effort_hrs - reduction)
-                dep_mutated = True
-        if not dep_mutated:
-            # No direct dep edge between these items — apply effort reduction directly
-            # to model parallelisation benefit and guarantee a fingerprint change.
-            for item in state.work_items:
-                if item.item_id in item_ids:
-                    reduction = item.current_estimate_hrs * self._cal.split_effort_reduction
-                    item.current_estimate_hrs = max(1.0, item.current_estimate_hrs - reduction)
-                    item.remaining_effort_hrs = max(0.0, item.remaining_effort_hrs - reduction)
+                # A direct dependency edge between the two items being
+                # "parallelized" is exactly the waiting time this action
+                # removes: collapse the serialization lag to zero (they can
+                # now start together / overlap) rather than deleting any
+                # work from the successor.
+                dep.lag_days = 0
+                dep.notes = (
+                    (dep.notes + " " if dep.notes else "")
+                    + "Lag removed via PARALLELIZE_ITEMS — successor effort unchanged."
+                )
+
+        # Record structural independence on the domain model so downstream
+        # engines (CriticalPathEngine) can treat these items as running
+        # concurrently instead of purely sequentially. This mutates
+        # scheduling metadata only, never hours.
+        for item in state.work_items:
+            if item.item_id not in item_ids:
+                continue
+            for other_id in item_ids:
+                if other_id != item.item_id and other_id not in item.can_parallel_with:
+                    item.can_parallel_with.append(other_id)
 
     def _apply_rebalance_sprint_load(self, state: ProjectState, rec: Recommendation) -> None:
-        resource_id = rec.affected_resource_ids[0] if rec.affected_resource_ids else None
-        if not resource_id:
+        # BATCH A / FIX-P2: Rebalancing moves WHO does the work, not HOW MUCH
+        # work exists. Source load decreases, receiver load increases, total
+        # remaining effort is unchanged. Effort fields are never mutated here,
+        # and we no longer simultaneously inflate sprint velocity — that was
+        # double-counting the same benefit the effort cut already claimed.
+        receiver_id = rec.affected_resource_ids[0] if rec.affected_resource_ids else None
+        if not receiver_id:
             return
+
+        # Capture the previous (source) assignees before we overwrite them,
+        # so we can relieve exactly the load that's moving off of them.
+        source_ids = {
+            item.assigned_resource
+            for item in state.work_items
+            if item.item_id in rec.affected_item_ids and item.assigned_resource
+        }
+        source_ids.discard(receiver_id)
+
         for item in state.work_items:
             if item.item_id in rec.affected_item_ids:
-                item.assigned_resource = resource_id
-        receiving_resource = next((r for r in state.team if r.resource_id == resource_id), None)
+                item.assigned_resource = receiver_id
+
+        receiving_resource = next((r for r in state.team if r.resource_id == receiver_id), None)
         if receiving_resource is not None:
             receiving_resource.allocation_pct = min(1.0, receiving_resource.allocation_pct + self._cal.reassign_effort_gain)
-        # Always reduce affected item effort and bump one active sprint's velocity so the
-        # simulation fingerprint always registers a state change, even when items are already
-        # assigned to this resource and allocation_pct is already maxed at 1.0.
-        for item in state.work_items:
-            if item.item_id in rec.affected_item_ids:
-                item.remaining_effort_hrs = max(0.0, item.remaining_effort_hrs * (1.0 - self._cal.rebalance_effort_gain))
-                item.current_estimate_hrs = max(1.0, item.current_estimate_hrs * (1.0 - self._cal.rebalance_effort_gain))
-        for sprint in state.sprints:
-            if sprint.status in {SprintStatus.NOT_STARTED, SprintStatus.IN_PROGRESS}:
-                sprint.planned_velocity_hrs = max(1.0, sprint.planned_velocity_hrs * (1.0 + self._cal.rebalance_effort_gain))
-                break
+
+        for source_id in source_ids:
+            source_resource = next((r for r in state.team if r.resource_id == source_id), None)
+            if source_resource is not None:
+                source_resource.allocation_pct = max(0.0, source_resource.allocation_pct - self._cal.reassign_effort_gain)
     def _apply_remove_dependency_bottleneck(self, state: ProjectState, rec: Recommendation) -> None:
-        # Decrementing lag_days alone is a no-op for the majority of real dependencies,
-        # which have lag_days == 0 to begin with (a plain "B can't start until A finishes"
-        # coupling, no extra buffer to shave off). Mirror _apply_parallelize_items instead:
-        # loosen the successor's own effort as the primary effect, and still decrement
-        # lag_days as a secondary effect for the minority of dependencies where it's nonzero.
-        successor_ids = set()
+        # BATCH A / FIX-P3: Removing a dependency bottleneck changes WAITING
+        # TIME (dependency lag / serialization), not the successor's
+        # engineering effort. A dependency with lag_days == 0 to begin with
+        # genuinely has no waiting time to remove for this mechanism — that
+        # is a correct zero-schedule-gain outcome, not a reason to fabricate
+        # an effort cut instead. Successor effort is never mutated here.
+        affected_ids = set(rec.affected_item_ids)
+        touched_any_lag = False
         for dep in state.dependencies:
-            if dep.predecessor_item_id in rec.affected_item_ids or dep.successor_item_id in rec.affected_item_ids:
+            if dep.predecessor_item_id in affected_ids or dep.successor_item_id in affected_ids:
                 if dep.lag_days > 0:
-                    cut = max(1, round(dep.lag_days * self._cal.split_effort_reduction))
-                    dep.lag_days = max(0, dep.lag_days - cut)
-                successor_ids.add(dep.successor_item_id)
-        # Same underlying mechanism as parallelize_items (decoupling a sequential
-        # dependency) -- share the same calibrated factor instead of a second,
-        # unrelated flat constant for the same kind of effect.
-        keep_factor = 1.0 - self._cal.split_effort_reduction
-        for item in state.work_items:
-            if item.item_id in successor_ids:
-                item.current_estimate_hrs = round(max(1.0, item.current_estimate_hrs * keep_factor), 2)
-                item.remaining_effort_hrs = round(max(0.0, item.remaining_effort_hrs * keep_factor), 2)
+                    dep.lag_days = 0
+                    touched_any_lag = True
+                    dep.notes = (
+                        (dep.notes + " " if dep.notes else "")
+                        + "Lag removed via REMOVE_DEPENDENCY_BOTTLENECK — successor effort unchanged."
+                    )
+        # No effort mutation: if no dependency in this set actually carried
+        # lag, the correct result is zero schedule benefit from this action,
+        # not a silently fabricated effort reduction.
+        _ = touched_any_lag
 
     def _apply_add_resource_skill(self, state: ProjectState, rec: Recommendation) -> None:
         resource_id = rec.affected_resource_ids[0] if rec.affected_resource_ids else None
@@ -1519,30 +1541,20 @@ class ActionApplicatorV2:
                 if swarm_resource_id not in item.can_parallel_with:
                     item.can_parallel_with.append(swarm_resource_id)
 
-                # (c) Derived effort reduction: how much the swarming resource's own
-                #     capacity actually adds, as a share of the primary owner's + their
-                #     combined capacity -- not a flat 0.60 regardless of who's swarming.
-                #     Brook's Law cap (max 40% reduction) is kept as a CEILING, not the
-                #     value itself, so a strong second resource still can't claim more
-                #     than the coordination-overhead-bounded maximum.
-                primary_resource = next((r for r in state.team if r.resource_id == item.assigned_resource), None)
-                primary_daily = (
-                    float(getattr(primary_resource, "daily_capacity_hrs", 8.0) or 8.0)
-                    * float(getattr(primary_resource, "availability_pct", 1.0) or 1.0)
-                    if primary_resource is not None else daily_hrs * avail
-                )
-                swarm_daily = daily_hrs * avail
-                total_daily = primary_daily + swarm_daily
-                share = (swarm_daily / total_daily) if total_daily > 0 else 0.5
-                parallelism_factor = max(1.0 - min(share, 0.40), 0.60)
-                item.remaining_effort_hrs = max(0.0, item.remaining_effort_hrs * parallelism_factor)
-                item.current_estimate_hrs = max(1.0, item.current_estimate_hrs * parallelism_factor)
+                # BATCH A / FIX-P5: Swarming a second person onto an item changes
+                # ELAPSED DURATION through concurrent capacity — it does not shrink
+                # the ~40 person-hours of engineering effort the item requires.
+                # The previous implementation multiplied remaining_effort_hrs /
+                # current_estimate_hrs by a "parallelism_factor" derived from
+                # Brook's Law, which silently deleted engineering effort. The
+                # schedule benefit of the added capacity_breakdown entry and the
+                # can_parallel_with link above is left for CriticalPathEngine /
+                # ForecastEngine to derive from committed concurrent capacity —
+                # effort itself is never mutated here.
             else:
-                # No identified swarming resource — generic focus/prioritisation benefit,
-                # scaled to this project's own rebalance gain instead of a flat 10%.
-                fallback_factor = 1.0 - self._cal.rebalance_effort_gain
-                item.remaining_effort_hrs = max(0.0, item.remaining_effort_hrs * fallback_factor)
-                item.current_estimate_hrs = max(1.0, item.current_estimate_hrs * fallback_factor)
+                # No identified swarming resource — no genuine capacity was added,
+                # so there is no effort or duration change to model.
+                pass
 
             break  # swarm applies to the first affected item only
 
