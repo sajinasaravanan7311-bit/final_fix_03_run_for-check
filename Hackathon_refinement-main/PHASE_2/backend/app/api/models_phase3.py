@@ -355,6 +355,7 @@ class MonteCarloResult(BaseModel):
 
     target_end_date: datetime = Field(..., description="Project target completion date (constant across all simulations)")
     simulation_count: int = Field(..., description="Number of simulations performed", ge=1)
+    seed: int = Field(..., description="Random seed used for reproducibility", ge=0)
     
     # Statistics
     statistics: MonteCarloStatistics

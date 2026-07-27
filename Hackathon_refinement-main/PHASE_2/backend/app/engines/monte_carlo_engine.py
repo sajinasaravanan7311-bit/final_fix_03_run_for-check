@@ -56,7 +56,7 @@ class MonteCarloEngine:
         metrics: ProjectMetrics,
         cp_result: CriticalPathResult,
         spillover: Optional[SpilloverAnalysis] = None,
-        simulation_count: int = 10000,
+        simulation_count: int = 1000,
         velocity_std_dev_pct: float = 0.15,  # 15% std dev around velocity
         remaining_work_std_dev_pct: float = 0.10,  # 10% std dev around remaining work
         seed: int = None,
@@ -80,11 +80,12 @@ class MonteCarloEngine:
         self.simulation_count = simulation_count
         self.velocity_std_dev_pct = velocity_std_dev_pct
         self.remaining_work_std_dev_pct = remaining_work_std_dev_pct
+        self.seed = 42 if seed is None else int(seed)
 
         # Use an instance-level RNG so multiple SimulationEngineV2 calls
         # in the same process don't share (and reset) the global random state.
         # This ensures baseline and simulated Monte Carlo draws are independent.
-        self._rng = random.Random(seed)
+        self._rng = random.Random(self.seed)
 
     def calculate(self) -> MonteCarloResult:
         # Override hardcoded defaults with project-calibrated values
@@ -181,6 +182,7 @@ class MonteCarloEngine:
         return MonteCarloResult(
             target_end_date=target_end_date,
             simulation_count=self.simulation_count,
+            seed=self.seed,
             statistics=statistics_obj,
             on_time_probability=float(round(on_time_probability, 4)),
             on_time_risk_level=risk_level,

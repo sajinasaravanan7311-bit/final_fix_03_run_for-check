@@ -35,6 +35,19 @@ from app.engines.project_calibration import ProjectCalibration
 from app.engines import cognition_common as cc
 from app.core import working_calendar
 
+
+def classify_schedule_variance(days: float) -> str:
+    """Return the human-readable sign category for schedule variance.
+
+    Backend convention: positive means late, negative means ahead, zero is on target.
+    """
+    if days > 0.05:
+        return "late"
+    if days < -0.05:
+        return "ahead"
+    return "on_target"
+
+
 def _normalize_name(name: str) -> str:
     """Lowercase, strip punctuation/initials-dots, collapse whitespace, so
     'M. Balasubramanian' and 'Meena Balasubramanian' compare fairly."""

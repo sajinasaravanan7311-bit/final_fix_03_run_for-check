@@ -1,4 +1,5 @@
 import React from 'react'
+import { formatScheduleVariance } from '../../../api/formatters'
 
 /**
  * ComparePlansTable - Side-by-side comparison of all 3 recovery plans
@@ -90,7 +91,7 @@ function ComparePlansTable({ plans, onSelectPlan }) {
                     ? 'text-amber-400'
                     : 'text-rose-400'
                 }`}>
-                  {plan.score.expected_delay_days.toFixed(1)}
+                  {formatScheduleVariance(plan.score.expected_delay_days)}
                 </div>
               </td>
 

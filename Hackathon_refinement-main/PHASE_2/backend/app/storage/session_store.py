@@ -6,6 +6,7 @@ For hackathon: one project per session.
 For production: replace with Redis + session tokens.
 """
 
+import copy
 from typing import Dict, Optional
 from datetime import datetime, timezone
 from threading import Lock
@@ -51,12 +52,20 @@ def _snapshot_from_analysis(analysis) -> dict:
         return {}
 
 
+def _clone_project_state(project_state: ProjectState):
+    """Return an isolated copy of a project state for storage or simulation."""
+    clone_method = getattr(project_state, "model_copy", None)
+    if callable(clone_method):
+        return clone_method(deep=True)
+    return copy.deepcopy(project_state)
+
+
 class Session:
     """Single project session."""
     
     def __init__(self, session_id: str, project_state: ProjectState):
         self.session_id = session_id
-        self.project_state = project_state
+        self.project_state = _clone_project_state(project_state)
         self.created_at = datetime.now(timezone.utc)
         self.last_accessed = datetime.now(timezone.utc)
         self.descoped_item_ids = set()  # For scope change tracking

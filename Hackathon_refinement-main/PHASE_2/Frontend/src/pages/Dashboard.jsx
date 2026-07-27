@@ -1,6 +1,7 @@
 import React, {useState, useEffect} from 'react'
 import { AlertTriangle, CheckCircle2, Clock3, Users, ShieldAlert } from 'lucide-react'
 import { api } from '../api/client'
+import { formatScheduleVariance } from '../api/formatters'
 import RecoveryPlansPage from './components/RecoveryPlans'
 import { ReasoningTrace } from './components/ReasoningTrace'
 import { SprintHealth } from './components/SprintHealth'
@@ -137,10 +138,7 @@ function HeroBanner({ session, onNavigate }) {
     : prob >= 40 ? 'At risk'
     : 'Critical risk'
 
-  const delayText = expected === null ? null
-    : expected < 0 ? `${Math.abs(expected)} days ahead of schedule`
-    : expected === 0 ? 'On schedule'
-    : `${expected} days late`
+  const delayText = expected === null ? null : formatScheduleVariance(expected)
 
   return (
     <section className="rounded-3xl border border-slate-700 bg-slate-900 p-6 shadow-inner shadow-black/20">

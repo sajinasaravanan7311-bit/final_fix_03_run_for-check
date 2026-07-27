@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { formatScheduleVariance } from '../../../api/formatters'
 import ApplyPlanModal from './ApplyPlanModal'
 
 /**
@@ -50,7 +51,7 @@ function PlanDetailView({ plan, session, onBack }) {
               ? 'text-amber-400'
               : 'text-rose-400'
           }`}>
-            {plan.score.expected_delay_days.toFixed(1)} days
+            {formatScheduleVariance(plan.score.expected_delay_days)}
           </div>
         </div>
         <div>

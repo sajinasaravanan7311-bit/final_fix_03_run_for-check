@@ -4,6 +4,7 @@ import {
   Clock, User, GitBranch, Zap, AlertTriangle
 } from 'lucide-react'
 import { api } from '../api/client'
+import { formatScheduleVariance } from '../api/formatters'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -104,6 +105,13 @@ function FinishDateWindow({ sessionId }) {
     : onTimePct >= 40 ? 'text-amber-300'
     : 'text-rose-300'
 
+  const simulationCountLabel = mc?.simulation_count != null
+    ? `${mc.simulation_count.toLocaleString()} simulations`
+    : '1,000 simulations'
+  const simulationSummary = mc?.simulation_count != null && mc?.seed != null
+    ? `${mc.simulation_count.toLocaleString()} simulations (seed ${mc.seed})`
+    : null
+
   const DATE_CARDS = [
     {
       label: 'Committed Date',
@@ -113,7 +121,7 @@ function FinishDateWindow({ sessionId }) {
     },
     {
       label: 'Likely Finish',
-      hint:  'The median outcome across 10 000 simulations. Half of all modelled scenarios finish before this date, half after. Use as the baseline planning estimate.',
+      hint:  `The median outcome across ${simulationCountLabel}. Half of all modelled scenarios finish before this date, half after. Use as the baseline planning estimate.`,
       value: fmtShort(stats.percentile_50 ?? null),
       color: 'text-teal-300',   border: 'border-teal-500/40',   bg: 'bg-teal-500/5',   accent: 'text-teal-400',
     },
@@ -134,12 +142,17 @@ function FinishDateWindow({ sessionId }) {
   return (
     <Section label="Delivery forecast" border="border-slate-700">
       <div className="flex items-center justify-between mb-3">
-        <p className="text-[11px] text-slate-500">
-          When will we finish?
-          {confidence != null && (
-            <span className="ml-2 text-teal-400 font-medium">{Math.round(confidence * 100)}% confidence</span>
+        <div>
+          <p className="text-[11px] text-slate-500">
+            When will we finish?
+            {confidence != null && (
+              <span className="ml-2 text-teal-400 font-medium">{Math.round(confidence * 100)}% confidence</span>
+            )}
+          </p>
+          {simulationSummary && (
+            <p className="mt-1 text-[10px] text-slate-500">{simulationSummary}</p>
           )}
-        </p>
+        </div>
         {onTimePct != null && (
           <div className="text-right">
             <span className={`text-2xl font-bold ${onTimeColor}`}>{onTimePct}%</span>
@@ -194,7 +207,7 @@ function FinishDateWindow({ sessionId }) {
           </div>
           {/* Interpretation guide: P50 < P80 < P95 ordering */}
           <p className="mt-2 text-[10px] text-slate-600 leading-relaxed px-0.5">
-            Dates are shown in ascending confidence order. All three are derived from the same 10 000-run Monte Carlo simulation of current velocity, blockers, and scope.
+            Dates are shown in ascending confidence order. All three are derived from the same {simulationCountLabel} of current velocity, blockers, and scope.
           </p>
         </>
       )}
@@ -1303,7 +1316,7 @@ function TrendPanel({ sessionId }) {
                   <td className="py-2 pl-3 text-right">
                     <p className={`${(e.expected_delay_days || 0) > 0 ? 'text-rose-300' : 'text-emerald-300'}`}>
                       {e.expected_delay_days != null
-                        ? `${e.expected_delay_days > 0 ? '+' : ''}${Math.round(e.expected_delay_days)}d`
+                        ? formatScheduleVariance(e.expected_delay_days)
                         : '—'}
                     </p>
                   </td>

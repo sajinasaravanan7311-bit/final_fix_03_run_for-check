@@ -32,18 +32,14 @@ class RecoveryPlanSimulator:
     def simulate_plan(self, plan: RecoveryPlanCandidate) -> ScenarioResult:
         """
         Simulate a recovery plan.
-        
-        Internally, this:
-        1. Passes all plan actions to SimulationEngine.simulate_scenario()
-        2. SimulationEngine clones the project, applies all actions in order, and recalculates
-        3. Returns the complete ScenarioResult with before/after metrics
-        
-        Args:
-            plan: RecoveryPlanCandidate with list of actions to apply.
-        
-        Returns:
-            ScenarioResult with detailed simulation output (probability, delay, risk, etc.)
+
+        The simulator always starts from an isolated project-state copy so a
+        preview cannot mutate the baseline state stored on the engine.
         """
-        # This is literally a 1-line delegation to the existing simulate_scenario method
-        # which already supports multiple recommendations
-        return self.simulation_engine.simulate_scenario(plan.actions)
+        original_state = self.simulation_engine.project_state
+        cloned_state = self.simulation_engine._clone_project_state()
+        self.simulation_engine.project_state = cloned_state
+        try:
+            return self.simulation_engine.simulate_scenario(plan.actions)
+        finally:
+            self.simulation_engine.project_state = original_state

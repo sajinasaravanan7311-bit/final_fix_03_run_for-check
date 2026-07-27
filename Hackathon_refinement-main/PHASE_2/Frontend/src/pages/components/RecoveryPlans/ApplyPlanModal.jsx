@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { api } from '../../../api/client'
+import { formatScheduleVariance } from '../../../api/formatters'
 
 /**
  * ApplyPlanModal - Confirmation dialog for applying a recovery plan
@@ -97,7 +98,7 @@ function ApplyPlanModal({ plan, session, onClose, onConfirm }) {
               <div className="flex justify-between items-center">
                 <span className="text-slate-400">Expected Delay</span>
                 <span className="font-semibold text-slate-200">
-                  {plan.score.expected_delay_days.toFixed(1)} days
+                  {formatScheduleVariance(plan.score.expected_delay_days)}
                 </span>
               </div>
             </div>

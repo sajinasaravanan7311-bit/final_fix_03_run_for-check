@@ -1,4 +1,5 @@
 import React from 'react'
+import { formatScheduleVariance } from '../../../api/formatters'
 
 /**
  * RecoveryPlanCard - Individual card for a recovery plan
@@ -77,7 +78,7 @@ function RecoveryPlanCard({ plan, isRecommended, onExpand }) {
                 ? 'text-amber-400'
                 : 'text-rose-400'
             }`}>
-              {plan.score.expected_delay_days.toFixed(1)} days
+              {formatScheduleVariance(plan.score.expected_delay_days)}
             </span>
           </div>
         </div>

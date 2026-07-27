@@ -473,6 +473,14 @@ class SimulationEngine:
         self.applicator = ActionApplicatorV2()
         self._scenario_cache: List[ScenarioResult] = []
 
+    def _clone_project_state(self) -> ProjectState:
+        """Return an isolated copy of the current project state for simulation."""
+        clone_method = getattr(self.project_state, "model_copy", None)
+        if callable(clone_method):
+            return clone_method(deep=True)
+        from copy import deepcopy
+        return deepcopy(self.project_state)
+
     def simulate(self, recommendation: Recommendation) -> ScenarioResult:
         """Simulate a single recommendation and return a structured scenario result."""
         return self.simulate_scenario([recommendation])
@@ -480,7 +488,7 @@ class SimulationEngine:
     def simulate_scenario(self, recommendations: Sequence[Union[Recommendation, str]]) -> ScenarioResult:
         """Clone the project state, apply one or more recommendations, and rerun the engine pipeline."""
         normalized_recommendations = [self._normalize_recommendation(rec) for rec in recommendations if rec is not None]
-        clone = self.project_state.model_copy(deep=True)
+        clone = self._clone_project_state()
         if not normalized_recommendations:
             return self._build_scenario_result([], self._recalculate_clone(clone), clone)
 
@@ -525,7 +533,7 @@ class SimulationEngine:
 
     def simulate_recommendation_actions(self, actions: List[SimulationAction]) -> SimulationResult:
         """Legacy helper kept for compatibility with the existing API surface."""
-        clone = self.project_state.model_copy(deep=True)
+        clone = self._clone_project_state()
         for action in actions:
             self.applicator.apply(clone, action)
 
@@ -1617,9 +1625,17 @@ class SimulationEngineV2:
         self.applicator = ActionApplicatorV2()
         self.runner = EngineRunnerV2()
 
+    def _clone_project_state(self) -> ProjectState:
+        """Return an isolated copy of the current project state for simulation."""
+        clone_method = getattr(self.project_state, "model_copy", None)
+        if callable(clone_method):
+            return clone_method(deep=True)
+        from copy import deepcopy
+        return deepcopy(self.project_state)
+
     def simulate(self, recommendation: Recommendation) -> SimulationResultV2:
         """Deep clone → apply → re-run pipeline → compute deltas."""
-        cloned_state = self.project_state.model_copy(deep=True)
+        cloned_state = self._clone_project_state()
 
         # Compute a lightweight fingerprint of fields the forecast uses so we can
         # detect if the applicator silently failed to mutate state (no-op).
@@ -1664,7 +1680,7 @@ class SimulationEngineV2:
 
     def simulate_scenario(self, recommendations: List[Recommendation]) -> SimulationResultV2:
         """Deep clone → apply all (sorted by ID) → re-run pipeline → compute deltas."""
-        cloned_state = self.project_state.model_copy(deep=True)
+        cloned_state = self._clone_project_state()
         self.applicator.apply_many(cloned_state, recommendations)
         simulated = self.runner.run(cloned_state, simulation_count=self.simulation_count)
         return self._compute_result([r.recommendation_id for r in sorted(recommendations, key=lambda r: r.recommendation_id)], simulated)
