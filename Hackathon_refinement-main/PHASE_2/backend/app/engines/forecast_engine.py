@@ -271,15 +271,19 @@ class ForecastEngine:
 
         project_start = self.project_state.project_info.forecast_anchor_date()
         as_of = self.project_state.project_info.effective_as_of_date()
-        days_elapsed = self._calculate_schedule_elapsed_days(sprint_days)
+        days_elapsed_raw = self._calculate_schedule_elapsed_days(sprint_days)
 
         # Diagnostic-only: what the OLD status-label-based method would have
         # said, and the gap between that and real elapsed time. This is the
         # "Calendar Variance" KPI -- it's what would have caught the Sprint
         # 6/7/8 stall immediately instead of relying on the effort/velocity
-        # math to eventually notice.
+        # math to eventually notice. Always uses the TRUE (uncapped) elapsed
+        # time -- see days_elapsed capping note below -- because this
+        # diagnostic exists specifically to surface wall-clock/status drift
+        # for in-progress projects and must not be masked by the completion
+        # cap applied to the delay math.
         status_derived_elapsed_days = self._status_derived_elapsed_days(sprint_days)
-        calendar_variance_days = float(round(days_elapsed - status_derived_elapsed_days, 2))
+        calendar_variance_days = float(round(days_elapsed_raw - status_derived_elapsed_days, 2))
 
         # National holidays (Republic Day, Independence Day, Gandhi Jayanti) are
         # irregular and can't already be priced into the velocity average the way
@@ -329,6 +333,48 @@ class ForecastEngine:
 
         target_end_date = self.project_state.project_info.target_end_date
         planned_window_days = float((target_end_date - project_start).days)
+
+        # ── Completion-aware elapsed-time cap ──────────────────────────────
+        # MODEL GAP: neither WorkItem nor ProjectState records the actual
+        # calendar date remaining effort reached zero (no
+        # `actual_completion_date` field exists anywhere in the domain
+        # model -- see forensic audit). So when a project has no remaining
+        # work (adjusted_remaining <= 0), days_elapsed_raw (real elapsed
+        # calendar time to the wall-clock "today") is NOT a valid proxy for
+        # "time actually consumed by this project" -- it just keeps growing
+        # with however long ago the work happened to finish, indefinitely,
+        # with no bound, for every day a report is run after the fact.
+        #
+        # We do not invent a completion date (e.g. guessing the last
+        # sprint's end_date, which was explicitly rejected -- a sprint can
+        # still be marked IN_PROGRESS in the workbook after all its items
+        # are done, and using it would silently assert information we don't
+        # have). Instead we bring days_elapsed into line with the rest of
+        # this formula's own completed-project behavior: remaining_days_total,
+        # spillover_delay_days, and remaining_days_blocker_loss are already
+        # correctly 0 once nothing remains (they are all derived from
+        # adjusted_remaining). days_elapsed is the one term in
+        # expected_delay_raw that is NOT effort-derived -- it is a bare
+        # wall-clock subtraction -- which is why it was the only term still
+        # growing without bound. Capping it at planned_window_days makes it
+        # consistent with those other terms: once nothing remains, we do not
+        # manufacture additional schedule delay from calendar time we cannot
+        # attribute to this project with the data actually available.
+        #
+        # Known, explicit limitation of this fallback: a project that
+        # genuinely finished LATE (e.g. completed two sprints past its
+        # target) will not show that historical lateness once
+        # remaining_effort_hours reaches 0, because the model has no actual-
+        # completion-date evidence to compute it from. Capturing that
+        # correctly requires adding an actual-completion-date field to the
+        # domain model -- out of scope for this fix, which only removes the
+        # unbounded runaway growth, and does not claim to reconstruct
+        # historical lateness that the data doesn't record.
+        if adjusted_remaining <= 0.0:
+            days_elapsed = min(days_elapsed_raw, planned_window_days)
+        else:
+            days_elapsed = days_elapsed_raw
+
         expected_delay_raw = days_elapsed + remaining_days_total + holiday_padding_days - planned_window_days
         expected_delay_days = float(round(expected_delay_raw, 2))
         on_track = expected_delay_days <= 0
@@ -384,7 +430,7 @@ class ForecastEngine:
             diagnostic_total_days=float(round(diagnostic_total, 2)),
             velocity_floor_saturated_by_blockers=velocity_floor_saturated_by_blockers,
             spillover_message=spillover_message,
-            real_elapsed_days=float(round(days_elapsed, 2)),
+            real_elapsed_days=float(round(days_elapsed_raw, 2)),
             status_derived_elapsed_days=float(round(status_derived_elapsed_days, 2)),
             calendar_variance_days=calendar_variance_days,
             non_working_days_in_remaining_window=int(non_working_days_in_remaining_window),

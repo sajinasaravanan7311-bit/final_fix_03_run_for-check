@@ -155,6 +155,14 @@ def sample_project_state_high_risk():
         target_end_date=end_date,
         sprint_duration_days=14,
         methodology="Agile Scrum",
+        # Pinned to the day after Sprint 1 (COMPLETED, ends 2025-01-15) so the
+        # forecast's real-elapsed-time math is anchored to this fixture's own
+        # narrative instead of the real wall clock. Without this, ForecastEngine's
+        # wall-clock anchoring (intentional in production -- see forecast_engine.py)
+        # measures elapsed time against however long ago 2025-01-01 actually was,
+        # which grows without bound as real time passes and is not what this test
+        # is exercising. STALE TEST fix -- production behavior is unchanged.
+        as_of_date=datetime(2025, 1, 16),
     )
     
     team = [
@@ -527,6 +535,11 @@ def test_schedule_risk_spillover_not_triple_weighted():
         target_end_date=end_date,
         sprint_duration_days=14,
         methodology="Agile Scrum",
+        # Pinned mid-Sprint-1 (IN_PROGRESS, 2025-01-01 -> 2025-01-15) so the
+        # forecast's real-elapsed-time math is anchored to this fixture's own
+        # narrative rather than the real wall clock. STALE TEST fix -- see
+        # sample_project_state_high_risk fixture above for the same rationale.
+        as_of_date=datetime(2025, 1, 8),
     )
 
     team = [

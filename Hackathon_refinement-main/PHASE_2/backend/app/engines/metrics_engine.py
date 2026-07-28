@@ -1072,37 +1072,30 @@ class MetricsEngine:
         return counts
 
     @staticmethod
-    @staticmethod
     def _estimate_blocker_velocity_impact(
         blockers, as_of_date=None, work_items=None, team=None
     ) -> float:
         """Estimate velocity impact from active blockers (0.0-1.0).
 
-        Age-weighted and WI-owner-scoped: the drag a blocker exerts on team
-        velocity is proportional to the fraction of the team that is actually
-        blocked — derived from the owners of the work items listed in
-        impacted_item_ids, not applied uniformly to the whole team.
+        Canonical severity-weight model. Each unresolved blocker contributes
+        a fixed weight based on its severity tier:
 
-        Example: BLK-004 blocks 2 WIs both owned by Meena on a 9-person team.
-        team_fraction = 1/9 ≈ 0.11.  A HIGH blocker's base_weight of 0.20 is
-        scaled to 0.20 × 0.11 = 0.022 before age amplification.  This keeps
-        the blocker delay proportional to real impact rather than treating one
-        person's external dependency as a whole-team slowdown.
+            Critical = 0.40
+            High     = 0.20
+            Medium   = 0.10
+            Low      = 0.05
+            Unknown  = 0.00 (does not affect the calculation)
 
-        Weighting formula per blocker:
-            base_weight   = severity-tier weight
-            team_fraction = distinct affected WI owners / total team size
-                            (floored at 1/team_size so a blocker always has
-                             some impact; capped at 1.0)
-            age_days      = (as_of - raised_date).days, floored at 0
-            age_factor    = 1 + log2(1 + age_days / 21)
-            effective_wt  = min(base_weight * team_fraction * age_factor, 0.80)
+        Independent blockers compound multiplicatively via survival-product
+        aggregation so impact never exceeds 1.0 and multiple LOW blockers
+        can't sum beyond it:
 
-        Survival-product aggregation (unchanged): independent blockers compound
-        multiplicatively so multiple LOW blockers can never sum beyond 1.0.
+            impact = 1 - PRODUCT(1 - severity_weight_i)
+
+        `as_of_date`, `work_items`, and `team` are accepted for call-site
+        compatibility but are not used to scale the weight — age and
+        team-size do not enter blocker probability.
         """
-        import math
-
         base_weight_map = {
             BlockerSeverity.CRITICAL: 0.40,
             BlockerSeverity.HIGH: 0.20,
@@ -1114,66 +1107,10 @@ class MetricsEngine:
         if not active_blockers:
             return 0.0
 
-        if as_of_date is None:
-            from datetime import datetime
-            as_of_date = datetime.utcnow()
-
-        # Build a lookup from item_id -> assigned_resource for team-fraction calc.
-        item_owner: dict = {}
-        if work_items:
-            for wi in work_items:
-                owner = getattr(wi, "assigned_resource", None)
-                if owner:
-                    item_owner[wi.item_id] = owner
-
-        total_team = max(1, len(team)) if team else 1
-
         survival = 1.0
         for blocker in active_blockers:
-            base_w = base_weight_map.get(blocker.severity, 0.05)
-
-            # ── team_fraction: who is actually blocked? ───────────────────────
-            # Collect all item IDs this blocker touches (primary + impacted).
-            all_blocked_ids: set = set()
-            primary = getattr(blocker, "related_item_id", None)
-            if primary:
-                all_blocked_ids.add(primary)
-            for iid in (getattr(blocker, "impacted_item_ids", None) or []):
-                all_blocked_ids.add(iid)
-
-            if all_blocked_ids and item_owner:
-                affected_owners = {
-                    item_owner[iid]
-                    for iid in all_blocked_ids
-                    if iid in item_owner
-                }
-                # Floor at 1 person so the blocker always registers something;
-                # cap at total_team so fraction never exceeds 1.0.
-                n_affected = max(1, len(affected_owners))
-            else:
-                # No WI linkage available — fall back to assuming 1 person
-                # affected rather than the whole team (conservative but not
-                # zero, and better than the old whole-team assumption).
-                n_affected = 1
-
-            team_fraction = min(1.0, n_affected / total_team)
-
-            # ── age amplification ─────────────────────────────────────────────
-            raised = getattr(blocker, "raised_date", None)
-            if raised is not None:
-                try:
-                    r = raised.replace(tzinfo=None) if raised.tzinfo else raised
-                    a = as_of_date.replace(tzinfo=None) if getattr(as_of_date, "tzinfo", None) else as_of_date
-                    age_days = max(0.0, (a - r).total_seconds() / 86400.0)
-                except Exception:
-                    age_days = 0.0
-            else:
-                age_days = 0.0
-
-            age_factor = 1.0 + math.log2(1.0 + age_days / 21.0)
-            effective_w = min(base_w * team_fraction * age_factor, 0.80)
-
-            survival *= (1.0 - effective_w)
+            base_w = base_weight_map.get(blocker.severity, 0.0)
+            survival *= (1.0 - base_w)
 
         impact = 1.0 - survival
         return round(min(impact, 0.95), 4)
