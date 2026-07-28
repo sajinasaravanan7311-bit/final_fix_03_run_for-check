@@ -12,6 +12,161 @@ from typing import List, Optional
 
 
 # ---------------------------------------------------------------------------
+# v3.2 — canonical taxonomy, typed engine sources, structured evidence
+# ---------------------------------------------------------------------------
+
+class ImpactDimensionType(str, Enum):
+    """
+    Stable canonical identifiers for impact dimensions.
+    These are the keys — presentation (title, icon, order) lives in the frontend.
+    """
+    SCHEDULE = "schedule"
+    RISK = "risk"
+    RESILIENCE = "resilience"
+    QUALITY = "quality"
+    FORECAST = "forecast"
+    GOVERNANCE = "governance"
+    RESOURCE = "resource"
+
+
+class ImpactConfidence(str, Enum):
+    VERY_HIGH = "Very High"
+    HIGH = "High"
+    MEDIUM = "Medium"
+    LOW = "Low"
+
+
+class EngineSource(str, Enum):
+    """
+    Typed identifiers for producing engines.
+    Replaces free-text strings; no string comparisons in routing or AI prompts.
+    """
+    RISK_ENGINE = "risk_engine"
+    FORECAST_ENGINE = "forecast_engine"
+    RESOURCE_ENGINE = "resource_engine"
+    SIMULATION = "simulation"
+    HEURISTIC = "heuristic"
+
+
+@dataclass(frozen=True)
+class StructuredEvidence:
+    """
+    Machine-readable evidence — AI and strategy builder consume this directly.
+    `message` is the human-readable fallback for display.
+    """
+    metric: str    # e.g. "bus_factor", "estimation_error_pct", "delay_days"
+    value: float   # numeric value of the metric
+    target: str    # e.g. skill name, resource id, sprint id, blocker id
+    message: str   # human-readable: "Only 1 of 5 team members cover AUTOSAR"
+
+    def to_dict(self) -> dict:
+        return {
+            "metric": self.metric,
+            "value": round(self.value, 4),
+            "target": self.target,
+            "message": self.message,
+        }
+
+
+@dataclass(frozen=True)
+class ConfidenceWithReason:
+    """
+    Confidence level + the one-sentence reason it was assigned.
+    Trust is earned by explanation, not by assertion.
+    """
+    level: ImpactConfidence
+    reason: str  # e.g. "Simulation validated estimate", "Heuristic; limited historical data"
+
+    def to_dict(self) -> dict:
+        return {
+            "level": self.level.value,
+            "reason": self.reason,
+        }
+
+
+@dataclass
+class ImpactDimension:
+    """
+    A single scored axis of recommendation impact — domain data only.
+    Presentation (title, icon, display_order, color, category) lives in
+    frontend DimensionConfig, keyed by `type`.
+
+    `type`        canonical ImpactDimensionType value — stable identifier.
+    `score`       normalised 0.0-1.0.
+    `confidence`  per-dimension certainty with explanation.
+    `evidence`    structured machine-readable proof.
+    `explanation` one sentence teaching why this matters.
+    `source`      typed engine that produced this dimension.
+    """
+    type: ImpactDimensionType
+    score: float
+    confidence: ConfidenceWithReason
+    evidence: StructuredEvidence
+    explanation: str
+    source: EngineSource
+
+    def to_dict(self) -> dict:
+        return {
+            "type": self.type.value,
+            "score": round(self.score, 4),
+            "confidence": self.confidence.to_dict(),
+            "evidence": self.evidence.to_dict(),
+            "explanation": self.explanation,
+            "source": self.source.value,
+        }
+
+
+class RecommendationIntent(str, Enum):
+    RECOVER = "Recover"
+    PROTECT = "Protect"
+    PREVENT = "Prevent"
+    IMPROVE = "Improve"
+    GOVERN = "Govern"
+    PREPARE = "Prepare"
+
+
+class ExecutionWindow(str, Enum):
+    IMMEDIATELY = "Immediately"
+    CURRENT_SPRINT = "Current Sprint"
+    NEXT_SPRINT = "Next Sprint"
+    BEFORE_RELEASE = "Before Release"
+    LONG_TERM = "Long Term"
+
+
+@dataclass
+class RecommendationDecisionContext:
+    """What the PM should do and when."""
+    intent: RecommendationIntent
+    execution_window: ExecutionWindow
+
+    def to_dict(self) -> dict:
+        return {
+            "intent": self.intent.value,
+            "execution_window": self.execution_window.value,
+        }
+
+
+@dataclass
+class RecommendationImpactMetrics:
+    """
+    Scored dimensions with typed source attribution and per-dimension confidence.
+    Pure numbers — no prose.
+    """
+    dimensions: List[ImpactDimension]
+    primary_dimension: ImpactDimensionType   # highest-scoring canonical type
+    impact_tier: str                          # "High" | "Medium" | "Low"
+    aggregate_confidence: ImpactConfidence  # conservative min across dims
+
+    def to_dict(self) -> dict:
+        return {
+            "dimensions": [d.to_dict() for d in self.dimensions],
+            "primary_dimension": self.primary_dimension.value,
+            "impact_tier": self.impact_tier,
+            "aggregate_confidence": self.aggregate_confidence.value,
+        }
+
+
+# ---------------------------------------------------------------------------
 # New enums
 # ---------------------------------------------------------------------------
 
@@ -99,7 +254,16 @@ class PMDecisionScore:
 
 @dataclass
 class PMExplanation:
-    """Answers the five PM questions for every recommendation."""
+    """
+    Answers every PM question for a recommendation — the single narrative object.
+
+    v3.2 merges the previous RecommendationNarrative (expected_outcome,
+    trade_offs, evidence_narrative) into this dataclass so there is one place
+    to maintain explanation logic. The three new fields default to empty so
+    existing callers that only populate the original five questions keep
+    working unchanged.
+    """
+    # ── Original fields ──────────────────────────────────────────────────
     trigger_reason: TriggerReason
     trigger_detail: str               # one-sentence signal description with data
     primary_objective: RecommendationObjective
@@ -108,6 +272,11 @@ class PMExplanation:
     implementation_effort: ImplementationEffort
     is_immediate_impact: bool         # True=tactical benefit now, False=future sprint
     impact_horizon: str               # "Immediate" | "Next Sprint" | "Long Term"
+
+    # ── Added in v3.2 (previously RecommendationNarrative) ──────────────
+    expected_outcome: str = ""              # one sentence grounded in primary dimension
+    trade_offs: List[str] = field(default_factory=list)   # severity-scaled plain-English strings
+    evidence_narrative: str = ""            # "Why the engine flagged this" with real metrics
 
     def to_dict(self) -> dict:
         return {
@@ -119,6 +288,59 @@ class PMExplanation:
             "implementation_effort": self.implementation_effort.value,
             "is_immediate_impact": self.is_immediate_impact,
             "impact_horizon": self.impact_horizon,
+            "expected_outcome": self.expected_outcome,
+            "trade_offs": self.trade_offs,
+            "evidence_narrative": self.evidence_narrative,
+        }
+
+
+# ---------------------------------------------------------------------------
+# Impact profile — thin composition with schema version (v3.2)
+# ---------------------------------------------------------------------------
+
+IMPACT_PROFILE_SCHEMA_VERSION = "3.2"
+
+
+@dataclass
+class RecommendationImpactProfile:
+    """
+    Composes DecisionContext + ImpactMetrics + PMExplanation (extended).
+    This is a long-lived API contract — schema_version is serialised on every
+    response so consumers can branch on it without silent breakage.
+    """
+    decision_context: RecommendationDecisionContext
+    impact_metrics: RecommendationImpactMetrics
+    explanation: PMExplanation   # single narrative; no separate Narrative object
+
+    # Convenience pass-throughs
+    @property
+    def intent(self) -> RecommendationIntent:
+        return self.decision_context.intent
+
+    @property
+    def execution_window(self) -> ExecutionWindow:
+        return self.decision_context.execution_window
+
+    @property
+    def dimensions(self) -> List[ImpactDimension]:
+        return self.impact_metrics.dimensions
+
+    @property
+    def confidence(self) -> ImpactConfidence:
+        return self.impact_metrics.aggregate_confidence
+
+    def impact_tier(self) -> str:
+        return self.impact_metrics.impact_tier
+
+    def primary_dimension(self) -> str:
+        return self.impact_metrics.primary_dimension.value
+
+    def to_dict(self) -> dict:
+        return {
+            "schema_version": IMPACT_PROFILE_SCHEMA_VERSION,
+            "decision_context": self.decision_context.to_dict(),
+            "impact_metrics": self.impact_metrics.to_dict(),
+            "explanation": self.explanation.to_dict(),
         }
 
 
@@ -128,14 +350,23 @@ class PMExplanation:
 
 @dataclass
 class PMIntelligence:
-    """Everything a PM needs to make a smart decision on this recommendation."""
+    """Everything a PM needs to make a smart decision on this recommendation.
+
+    Note: ``explanation`` and ``impact_profile.explanation`` (when present)
+    point to the **same** PMExplanation object — the priority engine builds
+    one PMExplanation and passes it to both. No duplication.
+    """
     classification: RecommendationClassification
     pm_decision_score: PMDecisionScore
     explanation: PMExplanation
+    impact_profile: Optional[RecommendationImpactProfile] = field(default=None)
 
     def to_dict(self) -> dict:
-        return {
+        d = {
             "classification": self.classification.value,
             "pm_decision_score": self.pm_decision_score.to_dict(),
             "explanation": self.explanation.to_dict(),
         }
+        if self.impact_profile is not None:
+            d["impact_profile"] = self.impact_profile.to_dict()
+        return d

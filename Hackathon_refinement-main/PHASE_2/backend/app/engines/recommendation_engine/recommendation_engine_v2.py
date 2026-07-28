@@ -158,9 +158,9 @@ class RecommendationEngineV2:
                 c.recommendation_id: ImpactEstimator(current_state, iter_upstream).estimate(c)
                 for c in candidates
             }
-            ranked_candidates = PriorityEngine(iter_upstream, self.scoring_weights).score_and_rank(
-                candidates, impact_estimates
-            )
+            ranked_candidates = PriorityEngine(
+                iter_upstream, current_state, self.scoring_weights
+            ).score_and_rank(candidates, impact_estimates)
             actionable = [
                 rec for rec in ranked_candidates
                 if (rec.affected_item_ids or rec.affected_resource_ids or rec.affected_blocker_ids)

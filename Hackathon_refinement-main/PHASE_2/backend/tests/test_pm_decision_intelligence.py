@@ -417,7 +417,7 @@ class TestPriorityEnginePMIntelligence:
     def test_pm_intelligence_attached_to_every_recommendation(self):
         upstream = _mock_upstream()
         weights = ScoringWeights()
-        engine = PriorityEngine(upstream, weights)
+        engine = PriorityEngine(upstream, weights=weights)
         candidates = [
             _candidate(RecommendationAction.RESOLVE_BLOCKER, blocker_ids=["BL-001"]),
             _candidate(RecommendationAction.CROSS_TRAIN_BACKUP, resource_ids=["R1", "R2"]),

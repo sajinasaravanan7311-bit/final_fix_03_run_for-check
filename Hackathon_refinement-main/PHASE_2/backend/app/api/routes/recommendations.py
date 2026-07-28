@@ -56,18 +56,50 @@ def _recommendation_type_from_action(action_type: RecommendationAction) -> Recom
         RecommendationAction.ADD_RESOURCE_SKILL: RecommendationType.ADD_RESOURCE,
     }.get(action_type, RecommendationType.CRITICAL_PATH_OPTIMIZATION)
 
-def _compute_impact_level(estimated_delay_reduction: float) -> str:
+def _compute_impact_level(rec) -> str:
     """
-    CRITICAL FIX: Classify impact level based on delay reduction magnitude.
+    Prefer the v3.2 impact profile's tier (derived from the highest-scoring
+    dimension) when present; fall back to the delay-magnitude heuristic for
+    recommendations without PM intelligence attached.
 
     Thresholds calibrated from Monte Carlo noise floor (±0.5 days typical).
     """
-    if estimated_delay_reduction >= 5.0:      # Significant reduction
+    pmi = getattr(rec, "pm_intelligence", None)
+    if pmi is not None:
+        profile = getattr(pmi, "impact_profile", None)
+        if profile is not None:
+            return profile.impact_tier()
+    delay = rec.estimated_delay_reduction_days
+    if delay >= 5.0:      # Significant reduction
         return "High"
-    elif estimated_delay_reduction >= 2.0:    # Moderate reduction
+    elif delay >= 2.0:    # Moderate reduction
         return "Medium"
-    else:                                      # Minimal/noise
+    else:                  # Minimal/noise
         return "Low"
+
+
+def _compute_impact_classification(rec, simulation_result: Optional[SimulationResult]) -> str:
+    """
+    Simulation, when available, is ground truth. Otherwise fall back to the
+    v3.2 impact profile's intent (Recover/Protect/Prevent/Improve/Govern/
+    Prepare) for a richer label than the plain delay check.
+    """
+    if simulation_result is not None:
+        return "Positive Impact" if simulation_result.is_positive_impact else "Negligible Impact"
+    pmi = getattr(rec, "pm_intelligence", None)
+    if pmi is not None:
+        profile = getattr(pmi, "impact_profile", None)
+        if profile is not None:
+            _intent_label = {
+                "Recover": "Positive Impact",
+                "Protect": "Strategic Value",
+                "Prevent": "Strategic Value",
+                "Improve": "Positive Impact",
+                "Govern": "Governance Value",
+                "Prepare": "Forecast Improvement",
+            }
+            return _intent_label.get(profile.intent.value, "Positive Impact")
+    return "Positive Impact" if rec.estimated_delay_reduction_days > 0.0 else "Negligible Impact"
 
 def _resolve_category(
     project_state: ProjectState,
@@ -274,7 +306,7 @@ def _recommendation_to_summary(
         rec.affected_resource_ids,
         rec.affected_blocker_ids,
     )
-    impact_level = _compute_impact_level(rec.estimated_delay_reduction_days)
+    impact_level = _compute_impact_level(rec)
     category = _resolve_category(project_state, rec.affected_blocker_ids) if project_state else None
     urgency = _compute_urgency(rec, project_state)
     action_summary = _build_action_summary(rec)
@@ -324,7 +356,8 @@ def _recommendation_to_summary(
             "forecast_lever_names": _get_forecast_lever_names(rec, simulation_result),
         }
 
-    impact_classification = "Positive Impact" if (simulation_result.is_positive_impact if simulation_result is not None else rec.estimated_delay_reduction_days > 0.0) else "Negligible Impact"
+    impact_classification = _compute_impact_classification(rec, simulation_result)
+    pmi = getattr(rec, "pm_intelligence", None)
     return RecommendationSummary(
         recommendation_id=rec.recommendation_id,
         type=_recommendation_type_from_action(rec.action_type),
@@ -337,6 +370,11 @@ def _recommendation_to_summary(
             "affected_blocker_ids": rec.affected_blocker_ids,
             "metadata": rec.metadata,
             "impact_evidence": impact_evidence,  # HIGH FIX: Now included
+            "impact_profile": (
+                pmi.impact_profile.to_dict()
+                if pmi and getattr(pmi, "impact_profile", None) is not None
+                else None
+            ),
         },
         reason=rec.description,
         implementation_effort=implementation_effort,  # HIGH FIX: Computed

@@ -340,7 +340,7 @@ def test_recommendation_engine_v2_rank_by_simulation_delta(monkeypatch):
 
     # Estimate impacts and triage via the PriorityEngine (mirrors generate())
     impact_estimates = {c.recommendation_id: ImpactEstimator(state, upstream).estimate(c) for c in candidates}
-    ranked_candidates = PriorityEngine(upstream, engine.scoring_weights).score_and_rank(candidates, impact_estimates)
+    ranked_candidates = PriorityEngine(upstream, weights=engine.scoring_weights).score_and_rank(candidates, impact_estimates)
 
     actionable = [rec for rec in ranked_candidates if rec.affected_item_ids or rec.affected_resource_ids or rec.affected_blocker_ids]
     actionable = engine._deduplicate(actionable)

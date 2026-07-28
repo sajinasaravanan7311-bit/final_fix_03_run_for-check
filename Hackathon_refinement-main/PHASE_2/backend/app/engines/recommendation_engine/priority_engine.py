@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
+from app.domain.models import ProjectState
 from app.engines.recommendation_engine.models import (
     ImpactEstimate,
     Recommendation,
@@ -21,11 +22,16 @@ from app.engines.recommendation_engine.pm_models import PMIntelligence
 
 
 class PriorityEngine:
-    def __init__(self, upstream: UpstreamEngineOutputs, weights: Optional[ScoringWeights] = None) -> None:
+    def __init__(
+        self,
+        upstream: UpstreamEngineOutputs,
+        project_state: Optional[ProjectState] = None,
+        weights: Optional[ScoringWeights] = None,
+    ) -> None:
         self.upstream = upstream
         self.weights = weights or ScoringWeights()
         self._pm_scorer = PMDecisionScorer(upstream)
-        self._pm_explainer = PMExplanationGenerator(upstream)
+        self._pm_explainer = PMExplanationGenerator(upstream, project_state)
 
     def score_and_rank(
         self,
@@ -70,10 +76,14 @@ class PriorityEngine:
                 },
             )
             explanation = self._pm_explainer.explain(_rec_shell, impact)
+            impact_profile = self._pm_explainer.build_impact_profile(
+                _rec_shell, candidate, impact, explanation
+            )
             pm_intelligence = PMIntelligence(
                 classification=classification_for(candidate.action_type),
                 pm_decision_score=pm_score,
                 explanation=explanation,
+                impact_profile=impact_profile,
             )
             _rec_shell.pm_intelligence = pm_intelligence
             ranked.append(_rec_shell)
