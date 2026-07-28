@@ -91,7 +91,7 @@ def _write_minimal_workbook(path: str, *, skill3_value: str, alloc_pct, avail_pc
          "Actual Hrs", "Remaining Hrs", "Progress %", "Status",
          "Scope Change", "Scope Reason"],
         [["WI-001", "Some Task", "Task", "Sprint 1", "Sprint 1",
-          "Test Resource", skill3_value, "Medium", 10, 10, 0, 10, 0,
+          "Test Resource", (skill3_value or "Primary Skill"), "Medium", 10, 10, 0, 10, 0,
           "Not Started", "No", None]],
     )
 
