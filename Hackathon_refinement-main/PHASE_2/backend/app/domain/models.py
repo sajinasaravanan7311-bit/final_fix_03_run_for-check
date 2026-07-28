@@ -6,7 +6,7 @@ These map directly to the workbook structure.
 """
 
 from pydantic import BaseModel, Field, field_validator, model_validator
-from typing import Optional, List
+from typing import Optional, List, Dict
 from datetime import datetime, date
 from enum import Enum
 
@@ -244,10 +244,47 @@ class Resource(BaseModel):
     secondary_skill: Optional[str] = Field(None, description="Secondary technical skill")
     skill_level: SkillLevel = Field(..., description="Skill proficiency level")
     allocation_pct: float = Field(
-        ..., ge=0.0, le=1.0, description="Allocation percentage (0.0-1.0)"
+        ..., ge=0.0, le=1.0,
+        description=(
+            "Aggregate/fallback allocation percentage (0.0-1.0), averaged across "
+            "all workbook sprint columns at parse time. Used only when no "
+            "sprint-specific entry exists in sprint_allocation_pct for the sprint "
+            "in question. Kept for backward compatibility with code that is not "
+            "yet sprint-context-aware."
+        ),
     )
     availability_pct: float = Field(
-        ..., ge=0.0, le=1.0, description="Availability percentage (0.0-1.0)"
+        ..., ge=0.0, le=1.0,
+        description=(
+            "Aggregate/fallback availability percentage (0.0-1.0), averaged "
+            "across all workbook sprint columns at parse time. Used only when "
+            "no sprint-specific entry exists in sprint_availability_pct for the "
+            "sprint in question. Kept for backward compatibility with code that "
+            "is not yet sprint-context-aware."
+        ),
+    )
+    sprint_allocation_pct: Dict[str, float] = Field(
+        default_factory=dict,
+        description=(
+            "Per-sprint allocation percentage, keyed by canonical Sprint.sprint_id "
+            "(e.g. 'SPR-1'), parsed from the workbook's 'S{n} Alloc %' columns. "
+            "A missing key means no sprint-specific data was present in the "
+            "workbook for that sprint -- callers should fall back to "
+            "allocation_pct. An explicit 0.0 value IS present in the dict and "
+            "must be honored as-is; it is not the same as a missing key. "
+            "ResourceIntelligence is the only place that should read this field "
+            "for capacity calculations -- do not duplicate this lookup "
+            "elsewhere."
+        ),
+    )
+    sprint_availability_pct: Dict[str, float] = Field(
+        default_factory=dict,
+        description=(
+            "Per-sprint availability percentage, keyed by canonical "
+            "Sprint.sprint_id (e.g. 'SPR-1'), parsed from the workbook's "
+            "'S{n} Avail %' columns. Same missing-vs-zero semantics as "
+            "sprint_allocation_pct above."
+        ),
     )
     daily_capacity_hrs: float = Field(
         default=8.0, ge=0.0, le=24.0, description="Daily work capacity in hours"

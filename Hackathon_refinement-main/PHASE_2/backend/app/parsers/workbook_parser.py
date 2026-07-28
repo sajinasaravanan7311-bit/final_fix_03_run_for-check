@@ -8,6 +8,7 @@ Structure: Row 1 = Title, Row 2 = Headers, Row 3+ = Data
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 import logging
+import re
 import openpyxl
 from openpyxl.worksheet.worksheet import Worksheet
 import uuid
@@ -24,6 +25,8 @@ from app.domain.models import (
     SprintActual,
     ProjectState,
     SkillLevel,
+    SkillCoverage,
+    SkillProficiency,
     WorkItemType,
     Priority,
     WorkItemStatus,
@@ -203,6 +206,43 @@ class WorkbookParser:
             status=self._get_str(row, "Status"),
         )
     
+    def _parse_sprint_pct_columns(self, row: Dict, suffix: str) -> Dict[str, float]:
+        """Parse per-sprint percentage columns like 'S1 Alloc %' .. 'S8 Alloc %'
+        (or however many sprints the workbook has -- not hardcoded to 8) into
+        a dict keyed by the SAME canonical sprint_id formula _generate_sprint_id
+        uses (f"SPR-{n}"), so this never invents a new sprint-ID format.
+
+        Column position n is a direct stand-in for sprint_number here: the
+        Sprint_Plan sheet numbers sprints sequentially starting at 1 in row
+        order (see _parse_sprints), and _generate_sprint_id(name, n) is
+        `f"SPR-{n}"` regardless of `name` -- so `S{n}` maps to `SPR-{n}`
+        without needing the parsed sprint list to exist yet (Team is parsed
+        before Sprint_Plan in parse()).
+
+        Uses the same `value is not None` zero-safety as _average_pct_columns:
+        an explicit 0 in e.g. 'S3 Avail %' is stored as 0.0, not omitted.
+        A column that is entirely absent from the sheet (fewer sprints than
+        elsewhere in the workbook) is simply not a key in the result --
+        that is the documented "missing" case ResourceIntelligence falls
+        back on.
+        """
+        pattern = re.compile(r"^S(\d+)\s+" + re.escape(suffix) + r"$")
+        result: Dict[str, float] = {}
+        for col_name, value in row.items():
+            match = pattern.match(col_name.strip()) if isinstance(col_name, str) else None
+            if not match:
+                continue
+            if value is None:
+                continue
+            try:
+                sprint_num = int(match.group(1))
+                pct_value = float(value)
+            except (ValueError, TypeError):
+                continue
+            sprint_id = self._generate_sprint_id("", sprint_num)
+            result[sprint_id] = pct_value
+        return result
+
     def _parse_team(self) -> List[Resource]:
         """Parse Team sheet (multiple rows)."""
         data_rows = self._get_sheet_data("Team")
@@ -217,6 +257,34 @@ class WorkbookParser:
             # Generate resource ID from name (use first name initials + last name)
             resource_id = self._generate_resource_id(resource_name)
             
+            # Skill 3: the workbook's Team sheet has a genuine third skill
+            # column ("Skill 3" / "Skill 3 Level"), same normalization as
+            # Skill 1/2 (_get_optional_str). It has no dedicated Resource
+            # field of its own -- unlike Skill 1 (primary_skill) and Skill 2
+            # (secondary_skill), it is fed into the existing skill_coverage
+            # list so it reaches ResourceIntelligence/covers_skill() through
+            # the same feasibility path Skill 1/2 already use, without a
+            # separate interpretation path.
+            #
+            # SkillProficiency has three tiers (PRIMARY/SECONDARY/BACKUP).
+            # PRIMARY/SECONDARY are already used for Skill 1/Skill 2.
+            # BACKUP is documented as reserved for coverage acquired via
+            # CROSS_TRAIN_BACKUP (acquired_via="cross_training"), which
+            # Skill 3 is not -- it's a workbook-declared skill like 1/2, just
+            # without its own dedicated scalar field. SECONDARY is the
+            # closest correct depth ("proficient but not the go-to person")
+            # and acquired_via="workbook" keeps it distinguishable from
+            # cross-trained coverage if that distinction ever matters.
+            skill_coverage: List[SkillCoverage] = []
+            skill_3 = self._get_optional_str(row, "Skill 3")
+            if skill_3:
+                skill_coverage.append(SkillCoverage(
+                    skill=skill_3,
+                    proficiency=SkillProficiency.SECONDARY,
+                    certified=False,
+                    acquired_via="workbook",
+                ))
+
             resources.append(Resource(
                 resource_id=resource_id,
                 name=resource_name,
@@ -226,7 +294,10 @@ class WorkbookParser:
                 skill_level=self._parse_skill_level(row, "Skill 1 Level"),
                 allocation_pct=self._average_pct_columns(row, "Alloc %"),
                 availability_pct=self._average_pct_columns(row, "Avail %"),
+                sprint_allocation_pct=self._parse_sprint_pct_columns(row, "Alloc %"),
+                sprint_availability_pct=self._parse_sprint_pct_columns(row, "Avail %"),
                 notes=self._get_optional_str(row, "Notes"),
+                skill_coverage=skill_coverage,
             ))
         
         return resources

@@ -63,9 +63,62 @@ class ResourceIntelligence:
                 return delta
         return float(self.state.project_info.sprint_duration_days or 10)
 
+    def _resolve_sprint_id(self, sprint_ref: Optional[str]) -> Optional[str]:
+        """Resolve sprint_ref (which may be a sprint_id OR a sprint_name) to
+        the canonical sprint_id used to key Resource.sprint_allocation_pct /
+        sprint_availability_pct. Falls back to the raw ref if it doesn't
+        match a known Sprint object (e.g. a caller that already passes a
+        sprint_id for a sprint outside project_state.sprints -- tests do
+        this) so a plain "SPR-3" string still works as a lookup key."""
+        if not sprint_ref:
+            return None
+        sprint = self.sprint(sprint_ref)
+        return sprint.sprint_id if sprint is not None else sprint_ref
+
+    def allocation_pct(self, resource: Resource, sprint_ref: Optional[str]) -> float:
+        """Sprint-specific allocation when known, else the aggregate
+        workbook fallback. Missing and explicit-zero are different: a
+        sprint_id present in sprint_allocation_pct with value 0.0 is honored
+        as 0.0; only an ABSENT sprint_id falls back to resource.allocation_pct."""
+        sprint_id = self._resolve_sprint_id(sprint_ref)
+        if sprint_id is not None:
+            exact = resource.sprint_allocation_pct.get(sprint_id)
+            if exact is not None:
+                return max(0.0, float(exact))
+        return max(0.0, float(resource.allocation_pct))
+
+    def availability_pct(self, resource: Resource, sprint_ref: Optional[str]) -> float:
+        """Sprint-specific availability when known, else the aggregate
+        workbook fallback. Same missing-vs-zero semantics as allocation_pct
+        above."""
+        sprint_id = self._resolve_sprint_id(sprint_ref)
+        if sprint_id is not None:
+            exact = resource.sprint_availability_pct.get(sprint_id)
+            if exact is not None:
+                return max(0.0, float(exact))
+        return max(0.0, float(resource.availability_pct))
+
+    def daily_rate_capacity_fallback(self, resource: Resource, sprint_ref: Optional[str]) -> float:
+        """Neutral, resource-specific hours/day capacity estimate for the
+        given sprint context: daily_capacity_hrs * sprint-aware allocation *
+        sprint-aware availability. This is the ONE place that formula lives;
+        do not recompute it locally in another engine (see evidence() and
+        _find_second_capable_resource-style callers, which should call this
+        instead of reading resource.allocation_pct/availability_pct scalars
+        directly when they already have a sprint_ref)."""
+        return (
+            max(0.0, float(resource.daily_capacity_hrs))
+            * self.allocation_pct(resource, sprint_ref)
+            * self.availability_pct(resource, sprint_ref)
+        )
+
     def effective_capacity_hours(self, resource: Resource, sprint_ref: Optional[str]) -> float:
-        return max(0.0, float(resource.daily_capacity_hrs)) * self.sprint_days(sprint_ref) * \
-            max(0.0, float(resource.allocation_pct)) * max(0.0, float(resource.availability_pct))
+        return (
+            max(0.0, float(resource.daily_capacity_hrs))
+            * self.sprint_days(sprint_ref)
+            * self.allocation_pct(resource, sprint_ref)
+            * self.availability_pct(resource, sprint_ref)
+        )
 
     def committed_hours(self, resource: Resource, sprint_ref: Optional[str],
                         exclude_item_ids: Optional[set[str]] = None) -> float:
@@ -168,9 +221,11 @@ class ResourceIntelligence:
                 source = "team_history"
             else:
                 rate = None
-        # Fallback is neutral, resource-specific workbook capacity/day.
-        capacity_daily = max(0.0, float(resource.daily_capacity_hrs)) * \
-            max(0.0, float(resource.allocation_pct)) * max(0.0, float(resource.availability_pct))
+        # Fallback is neutral, resource-specific workbook capacity/day for
+        # THIS sprint context (sprint-specific alloc/avail when known, else
+        # the aggregate fallback) -- single canonical formula, see
+        # daily_rate_capacity_fallback().
+        capacity_daily = self.daily_rate_capacity_fallback(resource, sprint_ref)
         rate = rate if rate is not None else capacity_daily
         # A known mismatch is infeasible for reassignment; do not invent a mismatch penalty.
         if not skill_match:

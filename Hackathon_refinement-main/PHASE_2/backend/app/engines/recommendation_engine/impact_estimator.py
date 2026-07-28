@@ -327,7 +327,7 @@ class ImpactEstimator:
                 continue
             measured, n = self.resource_intelligence.measured_daily_rate(resource, required_skill)
             rate = measured if measured is not None else (
-                resource.daily_capacity_hrs * resource.allocation_pct * resource.availability_pct
+                self.resource_intelligence.daily_rate_capacity_fallback(resource, sprint_ref)
             )
             ranked.append((min(free, required_hours) if required_hours > 0 else free, rate, n, resource.resource_id, resource))
         return max(ranked, default=(0,0,0,"",None))[-1]
