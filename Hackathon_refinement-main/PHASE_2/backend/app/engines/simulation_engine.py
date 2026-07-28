@@ -1649,6 +1649,7 @@ class SimulationEngineV2:
                         getattr(wi, "assigned_sprint", None),
                         round(float(getattr(wi, "current_estimate_hrs", 0.0)), 3),
                         getattr(wi, "priority", None),  # detects RESEQUENCE priority demotion
+                        tuple(sorted(getattr(wi, "can_parallel_with", None) or [])),  # detects PARALLELIZE_ITEMS
                     )
                     for wi in getattr(state_obj, "work_items", [])
                 )
@@ -1663,7 +1664,13 @@ class SimulationEngineV2:
                      tuple((e.resource_id, e.hours) for e in getattr(s, "capacity_breakdown", [])))
                     for s in getattr(state_obj, "sprints", [])
                 )
-                key = (items_sig, blockers_sig, team_sig, sprints_sig)
+                # Dependency lag/notes: PARALLELIZE_ITEMS collapses lag_days between
+                # two items being parallelized without touching any of the above.
+                dependencies_sig = tuple(
+                    (d.dependency_id, getattr(d, "lag_days", None))
+                    for d in getattr(state_obj, "dependencies", [])
+                )
+                key = (items_sig, blockers_sig, team_sig, sprints_sig, dependencies_sig)
                 return str(hash(key))
             except Exception:
                 return ""

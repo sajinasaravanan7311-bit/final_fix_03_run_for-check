@@ -360,19 +360,21 @@ class RiskEngine:
                     )
                 )
 
-        # Additive (not averaged) combination: the primary delay/spillover-
-        # fallback signal always counts in full, and the additive spillover
-        # pressure signal is added on top when present. Averaging these two
-        # (as before) meant that once spillover cleared, the primary signal
-        # was divided by a smaller denominator and could jump *up* even
-        # though a real risk factor (spillover) had just been resolved.
-        # Summing with a cap keeps the score monotonic: resolving spillover
-        # can only lower or hold the score, never raise it.
-        primary_slot = schedule_primary if schedule_primary > 0 else 0.0
-        additive_spillover_slot = (
-            spillover_component if (spillover_component > 0.0 and delay_component > 0.0) else 0.0
-        )
-        schedule_score = min(100.0, primary_slot + additive_spillover_slot)
+        # Blend (not sum) the primary delay/confidence signal with the
+        # spillover pressure signal: when both are present they are
+        # averaged, so spillover contributes real weight without being
+        # additively stacked on top of the primary signal (which would
+        # let it push the score past what either signal alone implies,
+        # i.e. "triple-weighting" spillover across delay, confidence,
+        # and a separate additive term). When only one signal is
+        # present, that signal's value is used directly. Because the
+        # blended value can only be pulled toward whichever component
+        # is smaller, resolving spillover (or delay) can only lower or
+        # hold the score, never raise it.
+        if schedule_primary > 0.0 and spillover_component > 0.0:
+            schedule_score = (schedule_primary + spillover_component) / 2.0
+        else:
+            schedule_score = schedule_primary if schedule_primary > 0.0 else spillover_component
 
         return RiskExplanation(
             score=min(100.0, schedule_score),

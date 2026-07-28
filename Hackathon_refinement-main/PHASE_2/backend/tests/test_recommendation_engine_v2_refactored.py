@@ -368,6 +368,18 @@ class TestSignalDetectorConsumption:
         project_state = self._create_sample_project_state()
         wi1 = next(w for w in project_state.work_items if w.item_id == "wi1")
         wi1.remaining_effort_hrs = 16.0
+        # STALE TEST fix: the shared fixture's dev2 only covers "Frontend"
+        # (see _create_sample_project_state), so reassigning a "Backend"
+        # item to dev2 hits the skill-mismatch feasibility gate and always
+        # reports delay_days == 0.0 -- exactly what the sibling test
+        # test_estimate_reassign_item_delay_days_is_not_zero exists to
+        # verify. This test's own docstring describes a *different*
+        # scenario: a same-skill SENIOR -> MID downgrade that should be
+        # feasible but schedule-costly. Give dev2 the matching secondary
+        # skill here (locally, not in the shared fixture) so the scenario
+        # this test claims to exercise is actually constructed.
+        dev2 = next(r for r in project_state.team if r.resource_id == "dev2")
+        dev2.secondary_skill = "Backend"
 
         metrics = MetricsEngine(project_state).calculate()
         dag = DependencyGraphEngine(project_state).build_dag()

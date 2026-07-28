@@ -206,8 +206,8 @@ class ImpactEstimator:
             before = item_hours / max(src.daily_rate_hrs, 0.01)
             after = item_hours / max(dst.daily_rate_hrs, 0.01)
             delay_days = before - after
-            note = (f"{source.resource_id}: {src.daily_rate_hrs:.1f}h/day ({src.source}); "
-                    f"{receiver.resource_id}: {dst.daily_rate_hrs:.1f}h/day ({dst.source}), "
+            note = (f"Source rate — {source.resource_id}: {src.daily_rate_hrs:.1f}h/day ({src.source}); "
+                    f"Receiver rate — {receiver.resource_id}: {dst.daily_rate_hrs:.1f}h/day ({dst.source}), "
                     f"{dst.free_capacity_hrs:.1f}h free in target sprint; effort unchanged.")
             confidence = ConfidenceLevel.HIGH if src.sample_size and dst.sample_size else ConfidenceLevel.MEDIUM
 

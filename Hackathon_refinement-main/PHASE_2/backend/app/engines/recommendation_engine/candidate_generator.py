@@ -353,17 +353,25 @@ class CandidateGenerator:
         flag = signal.context.get("flag", "") if signal.context else ""
 
         if flag == "NEAR_CRITICAL":
-            for item_id in signal.affected_item_ids[:2]:
+            # PARALLELIZE_ITEMS collapses the serialization lag between two
+            # items (or marks them as concurrently schedulable) — it is a
+            # relationship between a *pair* of items, not a property of one
+            # item alone. A single-item candidate is structurally a no-op
+            # (there's nothing to collapse lag against, and can_parallel_with
+            # has no other item to add), so only emit a candidate when we
+            # have at least two affected items to pair together.
+            pair_ids = signal.affected_item_ids[:2]
+            if len(pair_ids) >= 2:
                 candidates.append(self._build_candidate(
                     action_type=RecommendationAction.PARALLELIZE_ITEMS,
-                    title=f"Parallelize item ({item_id})",
-                    description=f"Reduce sequential dependency risk by parallelizing work around {item_id}",
-                    affected_item_ids=[item_id],
+                    title=f"Parallelize items ({pair_ids[0]}, {pair_ids[1]})",
+                    description=f"Reduce sequential dependency risk by parallelizing {pair_ids[0]} and {pair_ids[1]}",
+                    affected_item_ids=pair_ids,
                     affected_resource_ids=[],
                     affected_sprint_ids=signal.affected_sprint_ids,
                     affected_blocker_ids=signal.affected_blocker_ids,
                     root_signal_id=signal.signal_id,
-                    simulation_params={"target_item_id": item_id},
+                    simulation_params={"target_item_id": pair_ids[0], "paired_item_id": pair_ids[1]},
                     feasibility_checks={"has_capacity": True},
                 ))
             return candidates
