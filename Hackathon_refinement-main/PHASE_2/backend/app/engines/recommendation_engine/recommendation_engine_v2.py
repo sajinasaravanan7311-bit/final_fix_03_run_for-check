@@ -46,6 +46,7 @@ from app.engines.recommendation_engine.signal_detectors import (
     LowVelocityDetector,
 )
 from app.engines.simulation_engine import EngineRunner, EngineRunnerV2, SimulationEngineV2
+from app.engines.recommendation_engine.pm_decision_scorer import objective_for
 
 class RecommendationEngineV2:
     """
@@ -345,6 +346,13 @@ class RecommendationEngineV2:
                 deduped_final.append(rec)
         selected_recommendations = deduped_final
 
+        # Phase 2: Diversity reranking — prefer a balanced PM objective portfolio.
+        # Among the final list, avoid showing more than 2 recs with the same
+        # primary objective back-to-back.  This is a soft preference: if the
+        # project genuinely has 5 blockers that all need resolving, they will
+        # still appear — but other objective types will be interleaved.
+        selected_recommendations = self._diversity_rerank(selected_recommendations, max_per_objective=2)
+
         # Phase 2/3 of the recovery framework: diagnose WHY before the PM reads
         # WHAT to do. Pure re-labeling of the signals already detected above.
         # If diagnose() was called first, reuse its cache; otherwise classify now.
@@ -571,6 +579,42 @@ class RecommendationEngineV2:
             seen.add(rec.recommendation_id)
             deduped.append(rec)
         return deduped
+
+    def _diversity_rerank(
+        self, recommendations: List[Recommendation], max_per_objective: int = 2
+    ) -> List[Recommendation]:
+        """Interleave recommendations so no single PM objective dominates the top slots.
+
+        Algorithm: round-robin pass — pick the highest-scoring rec from each
+        objective in rotation until max_per_objective is hit for all objectives,
+        then append remainder sorted by priority_score.
+        """
+        from collections import defaultdict
+        by_obj: dict = defaultdict(list)
+        for rec in recommendations:
+            obj = objective_for(rec.action_type).value
+            by_obj[obj].append(rec)
+        # Each bucket is already sorted by priority_score desc (inherited from input)
+
+        result: List[Recommendation] = []
+        obj_counts: dict = defaultdict(int)
+        remaining: List[Recommendation] = []
+
+        # First pass: take up to max_per_objective from each objective
+        for obj, recs in sorted(by_obj.items()):
+            for rec in recs:
+                if obj_counts[obj] < max_per_objective:
+                    result.append(rec)
+                    obj_counts[obj] += 1
+                else:
+                    remaining.append(rec)
+
+        # Sort first-pass result by priority_score desc (diversity shuffle may have mixed it)
+        result.sort(key=lambda r: -r.priority_score)
+
+        # Append remaining sorted by priority_score
+        remaining.sort(key=lambda r: -r.priority_score)
+        return result + remaining
 
     def _action_fingerprint(self, rec: Recommendation) -> tuple:
         """

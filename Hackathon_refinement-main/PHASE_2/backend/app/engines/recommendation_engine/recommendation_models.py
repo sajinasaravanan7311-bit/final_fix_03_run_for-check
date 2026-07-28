@@ -150,9 +150,11 @@ class Recommendation:
     impact_evidence: List[SignalEvidence] = field(default_factory=list)
     metadata: Dict[str, Any] = field(default_factory=dict)
     counterfactual_statement: str = field(default="")  # INV 8 — "Without this, baseline was X%"
+    # Phase 2: PM Decision Intelligence — optional, backward compatible
+    pm_intelligence: Any = field(default=None)
 
     def to_api_dict(self) -> Dict[str, Any]:
-        return {
+        d: Dict[str, Any] = {
             "recommendation_id": self.recommendation_id,
             "action_type": self.action_type.value,
             "title": self.title,
@@ -170,6 +172,9 @@ class Recommendation:
             "estimated_risk_reduction": round(self.estimated_risk_reduction, 2),
             "metadata": self.metadata,
         }
+        if self.pm_intelligence is not None:
+            d["pm_intelligence"] = self.pm_intelligence.to_dict()
+        return d
 
 
 @dataclass(frozen=True)

@@ -12,12 +12,20 @@ from app.engines.recommendation_engine.models import (
     UpstreamEngineOutputs,
     ConfidenceLevel,
 )
+from app.engines.recommendation_engine.pm_decision_scorer import (
+    PMDecisionScorer,
+    classification_for,
+)
+from app.engines.recommendation_engine.pm_explanation_generator import PMExplanationGenerator
+from app.engines.recommendation_engine.pm_models import PMIntelligence
 
 
 class PriorityEngine:
     def __init__(self, upstream: UpstreamEngineOutputs, weights: Optional[ScoringWeights] = None) -> None:
         self.upstream = upstream
         self.weights = weights or ScoringWeights()
+        self._pm_scorer = PMDecisionScorer(upstream)
+        self._pm_explainer = PMExplanationGenerator(upstream)
 
     def score_and_rank(
         self,
@@ -29,33 +37,46 @@ class PriorityEngine:
             impact = impact_estimates.get(candidate.recommendation_id)
             if impact is None:
                 continue
-            priority_score = self._score(candidate, impact)
-            priority_score = max(0.0, min(1.0, priority_score))
-            ranked.append(
-                Recommendation(
-                    recommendation_id=candidate.recommendation_id,
-                    title=candidate.title,
-                    description=candidate.description,
-                    action_type=candidate.action_type,
-                    priority_score=priority_score,
-                    confidence=impact.confidence,
-                    estimated_hours_recovered=impact.estimated_hours_recovered,
-                    estimated_delay_reduction_days=impact.estimated_delay_reduction_days,
-                    estimated_risk_reduction=impact.estimated_risk_reduction,
-                    affected_item_ids=candidate.affected_item_ids,
-                    affected_resource_ids=candidate.affected_resource_ids,
-                    affected_sprint_ids=candidate.affected_sprint_ids,
-                    affected_blocker_ids=candidate.affected_blocker_ids,
-                    root_cause_signal_id=candidate.root_cause_signal_id,
-                    supporting_signal_ids=candidate.supporting_signal_ids,
-                    impact_evidence=impact.evidence,
-                    metadata={
-                        "simulation_params": candidate.simulation_params,
-                        "feasibility_checks": candidate.feasibility_checks,
-                        "historical_pattern": self._historical_pattern_from_candidate(candidate),
-                    },
-                )
+            legacy_score = self._score(candidate, impact)
+            pm_score = self._pm_scorer.score(candidate, impact)
+            # Blend: 60% PM multi-dimensional score + 40% legacy (schedule/risk/blocker)
+            # This ensures existing tests that depend on score magnitudes remain stable
+            # while strategic recs surface above pure delay-savers.
+            blended_score = 0.60 * pm_score.composite + 0.40 * legacy_score
+            priority_score = max(0.0, min(1.0, blended_score))
+
+            # Build PM intelligence payload (explanation requires a Recommendation shell)
+            _rec_shell = Recommendation(
+                recommendation_id=candidate.recommendation_id,
+                title=candidate.title,
+                description=candidate.description,
+                action_type=candidate.action_type,
+                priority_score=priority_score,
+                confidence=impact.confidence,
+                estimated_hours_recovered=impact.estimated_hours_recovered,
+                estimated_delay_reduction_days=impact.estimated_delay_reduction_days,
+                estimated_risk_reduction=impact.estimated_risk_reduction,
+                affected_item_ids=candidate.affected_item_ids,
+                affected_resource_ids=candidate.affected_resource_ids,
+                affected_sprint_ids=candidate.affected_sprint_ids,
+                affected_blocker_ids=candidate.affected_blocker_ids,
+                root_cause_signal_id=candidate.root_cause_signal_id,
+                supporting_signal_ids=candidate.supporting_signal_ids,
+                impact_evidence=impact.evidence,
+                metadata={
+                    "simulation_params": candidate.simulation_params,
+                    "feasibility_checks": candidate.feasibility_checks,
+                    "historical_pattern": self._historical_pattern_from_candidate(candidate),
+                },
             )
+            explanation = self._pm_explainer.explain(_rec_shell, impact)
+            pm_intelligence = PMIntelligence(
+                classification=classification_for(candidate.action_type),
+                pm_decision_score=pm_score,
+                explanation=explanation,
+            )
+            _rec_shell.pm_intelligence = pm_intelligence
+            ranked.append(_rec_shell)
 
         ranked.sort(key=lambda item: (-item.priority_score, item.recommendation_id))
         return ranked
