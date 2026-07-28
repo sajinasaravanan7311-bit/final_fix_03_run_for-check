@@ -213,7 +213,7 @@ class ImpactEstimator:
 
         return self._build_estimate_signed(candidate, hours_recovered=0.0, delay_days=delay_days,
             risk_reduction=0.0, confidence=confidence,
-            evidence=[self._evidence("ResourceIntelligence","effective_delivery_rate",dst.daily_rate_hrs,0.0,note)],
+            evidence=[self._evidence("MetricsEngine","effective_delivery_rate",dst.daily_rate_hrs,0.0,note)],
             notes=note)
 
     def _sum_item_remaining_effort(self, item_ids: List[str]) -> float:

@@ -112,8 +112,12 @@ class RecoveryPlanScorer:
             deadline_probability = scenario_result.monte_carlo_comparison.simulated_on_time_probability
             expected_delay_days = scenario_result.forecast_comparison.simulated_delay_days
             risk_score = scenario_result.risk_comparison.simulated_risk_score
-            baseline_probability = scenario_result.monte_carlo_comparison.baseline_on_time_probability
-            baseline_delay_days = scenario_result.forecast_comparison.baseline_delay_days
+            baseline_probability = getattr(
+                scenario_result.monte_carlo_comparison, "baseline_on_time_probability", deadline_probability
+            )
+            baseline_delay_days = getattr(
+                scenario_result.forecast_comparison, "baseline_delay_days", expected_delay_days
+            )
 
         # Derive execution complexity from number of actions and action types
         complexity_str = self._derive_complexity(plan.actions)

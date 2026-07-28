@@ -34,8 +34,13 @@ FORECAST_LEVER_MAP: Dict[RecommendationAction, List[str]] = {
         "resource.allocation_pct",
     ],
     RecommendationAction.PARALLELIZE_ITEMS: [
-        "dependency.lag_days",
-        "work_item.current_estimate_hrs",
+        "dependency.lag_days",           # collapsed to 0 only when a direct dependency
+                                          # edge exists between the two paired items
+        "work_item.can_parallel_with",   # unconditionally recorded on both paired items;
+                                          # current_estimate_hrs is intentionally never
+                                          # touched here (parallelizing changes
+                                          # serialization, not effort — see
+                                          # ActionApplicatorV2._apply_parallelize_items)
     ],
     RecommendationAction.REBALANCE_SPRINT_LOAD: [
         "work_item.assigned_resource",  # _apply_rebalance_sprint_load reassigns the item's

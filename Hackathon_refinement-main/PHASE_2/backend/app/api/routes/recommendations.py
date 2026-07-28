@@ -458,7 +458,7 @@ async def get_recommendations(
             # Rebuild the engine so we can call _compute_upstream() for advisor
             # input — but skip generate() since we already have the recs.
             recommendation_engine = _build_engine(session_id)
-            candidates = list(pipeline_result.recommendations)
+            candidates = list(pipeline_result.recommendations)[:top_n]
             # Re-rank with beam search using the same upstream (no extra pipeline run)
             upstream = recommendation_engine._compute_upstream()
         else:

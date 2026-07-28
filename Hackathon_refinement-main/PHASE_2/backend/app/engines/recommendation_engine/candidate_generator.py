@@ -224,7 +224,7 @@ class CandidateGenerator:
                 return candidates
             candidates.append(self._build_candidate(
                 action_type=RecommendationAction.REBALANCE_SPRINT_LOAD,
-                title=f"Rebalance sprint load → {resource_id}",
+                title=f"Rebalance sprint load ({resource_id})",
                 description=(
                     f"{resource_id} has spare capacity (load ratio {load_ratio:.0%}); "
                     f"move work from {source_peer.resource_id} to absorb {len(source_items)} item(s)."
@@ -505,7 +505,7 @@ class CandidateGenerator:
         if receiver is not None:
             candidates.append(self._build_candidate(
                 action_type=RecommendationAction.REBALANCE_SPRINT_LOAD,
-                title=f"Rebalance sprint load → {receiver.resource_id}",
+                title=f"Rebalance sprint load ({receiver.resource_id})",
                 description=(
                     f"Rebalance work to {receiver.resource_id} to close schedule gap ({schedule_gap_hours:.1f}h). "
                     f"Items in scope: {', '.join(signal.affected_item_ids[:2])}"
