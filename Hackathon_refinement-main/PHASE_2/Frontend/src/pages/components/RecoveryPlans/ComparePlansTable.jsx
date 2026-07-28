@@ -1,5 +1,5 @@
 import React from 'react'
-import { formatScheduleVariance } from '../../../api/formatters'
+import { formatScheduleVariance, formatPercent, formatNumber } from '../../../api/formatters'
 
 /**
  * ComparePlansTable - Side-by-side comparison of all 3 recovery plans
@@ -41,7 +41,9 @@ function ComparePlansTable({ plans, onSelectPlan }) {
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-700">
-          {plans.map((plan) => (
+          {plans.map((plan) => {
+            const score = plan.score || {}
+            return (
             <tr
               key={plan.plan_id}
               onClick={() => onSelectPlan(plan.plan_id)}
@@ -71,12 +73,12 @@ function ComparePlansTable({ plans, onSelectPlan }) {
               <td className="px-4 py-4">
                 <div className="text-center">
                   <div className="text-lg font-bold text-emerald-400">
-                    {Math.round(plan.score.deadline_probability * 100)}%
+                    {formatPercent(score.deadline_probability)}
                   </div>
                   <div className="mt-1 h-1.5 w-12 mx-auto bg-slate-700 rounded-full overflow-hidden">
                     <div
                       className="h-full bg-emerald-500"
-                      style={{ width: `${plan.score.deadline_probability * 100}%` }}
+                      style={{ width: `${Math.min(100, (score.deadline_probability || 0) * 100)}%` }}
                     ></div>
                   </div>
                 </div>
@@ -85,20 +87,22 @@ function ComparePlansTable({ plans, onSelectPlan }) {
               {/* Expected Delay */}
               <td className="px-4 py-4 text-center">
                 <div className={`font-semibold ${
-                  plan.score.expected_delay_days <= 0
+                  score.expected_delay_days == null
+                    ? 'text-slate-400'
+                    : score.expected_delay_days <= 0
                     ? 'text-emerald-400'
-                    : plan.score.expected_delay_days <= 5
+                    : score.expected_delay_days <= 5
                     ? 'text-amber-400'
                     : 'text-rose-400'
                 }`}>
-                  {formatScheduleVariance(plan.score.expected_delay_days)}
+                  {formatScheduleVariance(score.expected_delay_days)}
                 </div>
               </td>
 
               {/* Risk Score */}
               <td className="px-4 py-4 text-center">
                 <div className="font-semibold text-slate-300">
-                  {plan.score.overall_risk_score.toFixed(2)}
+                  {formatNumber(score.overall_risk_score, 2)}
                 </div>
               </td>
 
@@ -106,21 +110,23 @@ function ComparePlansTable({ plans, onSelectPlan }) {
               <td className="px-4 py-4">
                 <div className="text-center">
                   <div className={`inline-block rounded-full px-2.5 py-1 text-xs font-semibold ${
-                    plan.score.execution_complexity === 'Low'
+                    score.execution_complexity === 'Low'
                       ? 'bg-emerald-500/20 text-emerald-300'
-                      : plan.score.execution_complexity === 'Medium'
+                      : score.execution_complexity === 'Medium'
                       ? 'bg-amber-500/20 text-amber-300'
-                      : 'bg-rose-500/20 text-rose-300'
+                      : score.execution_complexity === 'High'
+                      ? 'bg-rose-500/20 text-rose-300'
+                      : 'bg-slate-500/20 text-slate-300'
                   }`}>
-                    {plan.score.execution_complexity}
+                    {score.execution_complexity || '—'}
                   </div>
                   <div className="mt-1 text-xs text-slate-500">
-                    {plan.score.actions_required} {plan.score.actions_required === 1 ? 'action' : 'actions'}
+                    {score.actions_required ?? '—'} {score.actions_required === 1 ? 'action' : 'actions'}
                   </div>
                 </div>
               </td>
             </tr>
-          ))}
+          )})}
         </tbody>
       </table>
 

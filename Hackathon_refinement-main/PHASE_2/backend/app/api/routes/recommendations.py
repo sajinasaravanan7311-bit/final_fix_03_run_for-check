@@ -24,6 +24,7 @@ from app.api.models_phase3 import (
     RecommendationValidationResponse,
     TradeOffResponse,
 )
+from app.api.models_pm_intelligence import serialize_pm_intelligence
 from app.domain.models import ProjectState
 # NOTE: AdvisorInputBuilder is imported lazily (see _get_advisor_builder below)
 # to break a circular import: advisor_input_builder.py imports
@@ -418,6 +419,7 @@ def _recommendation_to_summary(
             f"{round(baseline_prob * 100, 1)}% and the project remains "
             f"{round(baseline_delay, 1)} day(s) behind schedule."
         ),
+        pm_intelligence=serialize_pm_intelligence(rec),
     )
 
 def _build_engine(session_id: str) -> RecommendationEngineV2:

@@ -1,0 +1,165 @@
+nohup: ignoring input
+INFO:     Will watch for changes in these directories: ['/workspaces/final_fix_03_run_for-check/Hackathon_refinement-main/PHASE_2']
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [8521] using WatchFiles
+WARNING:root:AI client initialization failed; AI advisor will run in fallback mode: AOAI_FARM_API_KEY is not set.  Add it to your .env file.
+  AOAI_FARM_API_KEY=<your key from Bosch credentials>
+INFO:     Started server process [8555]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     103.205.152.155:0 - "GET / HTTP/1.1" 404 Not Found
+INFO:     103.205.152.155:0 - "GET /favicon.ico HTTP/1.1" 404 Not Found
+INFO:     103.205.152.155:0 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/health HTTP/1.1" 200 OK
+WARNING:app.engines.recommendation_engine.recommendation_engine_v2:Optimizer iter 0: skipping — 8252ce5075 (RecommendationAction.RESEQUENCE_NON_CRITICAL_ITEM) — Simulation applicator did not mutate cloned state for recommendation 8252ce5075
+INFO:     103.205.152.155:0 - "POST /api/demo/load HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/forecast?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/session-snapshot?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/forecast?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/session-snapshot?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/session-snapshot?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/session-snapshot?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/monte-carlo?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/risk?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/forecast-trend?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/forecast?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/dependencies?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/risk?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/forecast-trend?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/monte-carlo?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/forecast?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/dependencies?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/forecast?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/forecast?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/recovery-plans?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/recovery-plans?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/sprint-health?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/sprint-health?session_id=1042d76e HTTP/1.1" 200 OK
+WARNING:app.api.routes.reasoning_trace:EMIOSAdvisor AI upgrade failed (AOAI_FARM_API_KEY is not set.  Add it to your .env file.
+  AOAI_FARM_API_KEY=<your key from Bosch credentials>) — keeping deterministic fallback
+INFO:     103.205.152.155:0 - "GET /api/reasoning-trace?session_id=1042d76e HTTP/1.1" 200 OK
+WARNING:app.api.routes.reasoning_trace:EMIOSAdvisor AI upgrade failed (AOAI_FARM_API_KEY is not set.  Add it to your .env file.
+  AOAI_FARM_API_KEY=<your key from Bosch credentials>) — keeping deterministic fallback
+INFO:     103.205.152.155:0 - "GET /api/reasoning-trace?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/forecast?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/session-snapshot?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/forecast?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/session-snapshot?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/session-snapshot?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/session-snapshot?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/dependencies?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/risk?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/forecast?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/forecast-trend?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/monte-carlo?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/dependencies?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/monte-carlo?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/risk?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/forecast?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/forecast-trend?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/forecast?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/forecast?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/recovery-plans?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/recovery-plans?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "POST /api/recovery-plans/apply HTTP/1.1" 200 OK
+WARNING:app.engines.recommendation_engine.recommendation_engine_v2:Optimizer iter 0: skipping — 8252ce5075 (RecommendationAction.RESEQUENCE_NON_CRITICAL_ITEM) — Simulation applicator did not mutate cloned state for recommendation 8252ce5075
+INFO:     103.205.152.155:0 - "POST /api/recovery-plans/apply HTTP/1.1" 200 OK
+WARNING:app.engines.recommendation_engine.recommendation_engine_v2:Optimizer iter 0: skipping — 8252ce5075 (RecommendationAction.RESEQUENCE_NON_CRITICAL_ITEM) — Simulation applicator did not mutate cloned state for recommendation 8252ce5075
+INFO:     103.205.152.155:0 - "GET /api/sprint-health?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/sprint-health?session_id=1042d76e HTTP/1.1" 200 OK
+WARNING:app.api.routes.reasoning_trace:EMIOSAdvisor AI upgrade failed (AOAI_FARM_API_KEY is not set.  Add it to your .env file.
+  AOAI_FARM_API_KEY=<your key from Bosch credentials>) — keeping deterministic fallback
+INFO:     103.205.152.155:0 - "GET /api/reasoning-trace?session_id=1042d76e HTTP/1.1" 200 OK
+WARNING:app.api.routes.reasoning_trace:EMIOSAdvisor AI upgrade failed (AOAI_FARM_API_KEY is not set.  Add it to your .env file.
+  AOAI_FARM_API_KEY=<your key from Bosch credentials>) — keeping deterministic fallback
+INFO:     103.205.152.155:0 - "GET /api/reasoning-trace?session_id=1042d76e HTTP/1.1" 200 OK
+WARNING:app.api.routes.reasoning_trace:EMIOSAdvisor AI upgrade failed (AOAI_FARM_API_KEY is not set.  Add it to your .env file.
+  AOAI_FARM_API_KEY=<your key from Bosch credentials>) — keeping deterministic fallback
+INFO:     103.205.152.155:0 - "GET /api/reasoning-trace?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/forecast-trend?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/dependencies?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/risk?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/monte-carlo?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/forecast?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/forecast?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/risk?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/forecast-trend?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/dependencies?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/forecast?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/monte-carlo?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/forecast?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/recovery-plans?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/recovery-plans?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "POST /api/recovery-plans/apply HTTP/1.1" 200 OK
+WARNING:app.engines.recommendation_engine.recommendation_engine_v2:Optimizer iter 0: skipping — 8252ce5075 (RecommendationAction.RESEQUENCE_NON_CRITICAL_ITEM) — Simulation applicator did not mutate cloned state for recommendation 8252ce5075
+INFO:     103.205.152.155:0 - "GET /api/sprint-health?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/sprint-health?session_id=1042d76e HTTP/1.1" 200 OK
+WARNING:app.api.routes.reasoning_trace:EMIOSAdvisor AI upgrade failed (AOAI_FARM_API_KEY is not set.  Add it to your .env file.
+  AOAI_FARM_API_KEY=<your key from Bosch credentials>) — keeping deterministic fallback
+INFO:     103.205.152.155:0 - "GET /api/reasoning-trace?session_id=1042d76e HTTP/1.1" 200 OK
+WARNING:app.api.routes.reasoning_trace:EMIOSAdvisor AI upgrade failed (AOAI_FARM_API_KEY is not set.  Add it to your .env file.
+  AOAI_FARM_API_KEY=<your key from Bosch credentials>) — keeping deterministic fallback
+INFO:     103.205.152.155:0 - "GET /api/reasoning-trace?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/forecast?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/session-snapshot?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/forecast?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/session-snapshot?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/session-snapshot?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/session-snapshot?session_id=1042d76e HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "POST /api/demo/reset HTTP/1.1" 200 OK
+WARNING:app.engines.recommendation_engine.recommendation_engine_v2:Optimizer iter 0: skipping — 8252ce5075 (RecommendationAction.RESEQUENCE_NON_CRITICAL_ITEM) — Simulation applicator did not mutate cloned state for recommendation 8252ce5075
+INFO:     103.205.152.155:0 - "POST /api/demo/load HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/session-snapshot?session_id=ec9dba65 HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/forecast?session_id=ec9dba65 HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/session-snapshot?session_id=ec9dba65 HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/forecast?session_id=ec9dba65 HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/session-snapshot?session_id=ec9dba65 HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/session-snapshot?session_id=ec9dba65 HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/recovery-plans?session_id=ec9dba65 HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/recovery-plans?session_id=ec9dba65 HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/sprint-health?session_id=ec9dba65 HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/sprint-health?session_id=ec9dba65 HTTP/1.1" 200 OK
+WARNING:app.api.routes.reasoning_trace:EMIOSAdvisor AI upgrade failed (AOAI_FARM_API_KEY is not set.  Add it to your .env file.
+  AOAI_FARM_API_KEY=<your key from Bosch credentials>) — keeping deterministic fallback
+INFO:     103.205.152.155:0 - "GET /api/reasoning-trace?session_id=ec9dba65 HTTP/1.1" 200 OK
+WARNING:app.api.routes.reasoning_trace:EMIOSAdvisor AI upgrade failed (AOAI_FARM_API_KEY is not set.  Add it to your .env file.
+  AOAI_FARM_API_KEY=<your key from Bosch credentials>) — keeping deterministic fallback
+INFO:     103.205.152.155:0 - "GET /api/reasoning-trace?session_id=ec9dba65 HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/sprint-health?session_id=ec9dba65 HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/sprint-health?session_id=ec9dba65 HTTP/1.1" 200 OK
+WARNING:app.api.routes.reasoning_trace:EMIOSAdvisor AI upgrade failed (AOAI_FARM_API_KEY is not set.  Add it to your .env file.
+  AOAI_FARM_API_KEY=<your key from Bosch credentials>) — keeping deterministic fallback
+INFO:     103.205.152.155:0 - "GET /api/reasoning-trace?session_id=ec9dba65 HTTP/1.1" 200 OK
+WARNING:app.api.routes.reasoning_trace:EMIOSAdvisor AI upgrade failed (AOAI_FARM_API_KEY is not set.  Add it to your .env file.
+  AOAI_FARM_API_KEY=<your key from Bosch credentials>) — keeping deterministic fallback
+INFO:     103.205.152.155:0 - "GET /api/reasoning-trace?session_id=ec9dba65 HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/session-snapshot?session_id=ec9dba65 HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/forecast?session_id=ec9dba65 HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/session-snapshot?session_id=ec9dba65 HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/forecast?session_id=ec9dba65 HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/session-snapshot?session_id=ec9dba65 HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/session-snapshot?session_id=ec9dba65 HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/risk?session_id=ec9dba65 HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/forecast-trend?session_id=ec9dba65 HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/monte-carlo?session_id=ec9dba65 HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/monte-carlo?session_id=ec9dba65 HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/forecast?session_id=ec9dba65 HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/forecast-trend?session_id=ec9dba65 HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/dependencies?session_id=ec9dba65 HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/forecast?session_id=ec9dba65 HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/risk?session_id=ec9dba65 HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/dependencies?session_id=ec9dba65 HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/forecast?session_id=ec9dba65 HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/forecast?session_id=ec9dba65 HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/recovery-plans?session_id=ec9dba65 HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/recovery-plans?session_id=ec9dba65 HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/sprint-health?session_id=ec9dba65 HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/sprint-health?session_id=ec9dba65 HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/recovery-plans?session_id=ec9dba65 HTTP/1.1" 200 OK
+INFO:     103.205.152.155:0 - "GET /api/recovery-plans?session_id=ec9dba65 HTTP/1.1" 200 OK
+WARNING:app.api.routes.reasoning_trace:EMIOSAdvisor AI upgrade failed (AOAI_FARM_API_KEY is not set.  Add it to your .env file.
+  AOAI_FARM_API_KEY=<your key from Bosch credentials>) — keeping deterministic fallback
+INFO:     103.205.152.155:0 - "GET /api/reasoning-trace?session_id=ec9dba65 HTTP/1.1" 200 OK
+WARNING:app.api.routes.reasoning_trace:EMIOSAdvisor AI upgrade failed (AOAI_FARM_API_KEY is not set.  Add it to your .env file.
+  AOAI_FARM_API_KEY=<your key from Bosch credentials>) — keeping deterministic fallback
+INFO:     103.205.152.155:0 - "GET /api/reasoning-trace?session_id=ec9dba65 HTTP/1.1" 200 OK

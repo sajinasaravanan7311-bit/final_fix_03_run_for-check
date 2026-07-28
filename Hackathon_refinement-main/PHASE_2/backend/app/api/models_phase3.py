@@ -5,6 +5,8 @@ from datetime import datetime
 from typing import Optional, List, Dict, Any
 from enum import Enum
 
+from app.api.models_pm_intelligence import PMIntelligenceResponse
+
 
 class ForecastDelayBreakdown(BaseModel):
     """
@@ -612,6 +614,12 @@ class RecommendationSummary(BaseModel):
     simulation_evidence: Optional[RecommendationSimulationEvidence] = Field(None, description="Baseline/simulated/delta metrics plus forecast levers changed by the recommendation")
     validation: Optional[RecommendationValidationResponse] = Field(None, description="Why this recommendation was selected and how it compares to alternatives")
     counterfactual_statement: Optional[str] = Field(None, description="What happens if this action is NOT taken, e.g. 'Without this action, on-time probability stays at 34%'")
+    pm_intelligence: Optional[PMIntelligenceResponse] = Field(
+        None,
+        description="Full PM Decision Intelligence (classification, pm_decision_score, explanation, impact_profile). "
+                    "None for recommendations generated before this was attached. "
+                    "`details.impact_profile` is retained alongside this for backward compatibility.",
+    )
 
 
 class RecommendationSimulationRequest(BaseModel):

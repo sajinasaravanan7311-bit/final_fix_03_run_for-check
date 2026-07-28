@@ -6,6 +6,7 @@ import RecoveryPlansPage from './components/RecoveryPlans'
 import { ReasoningTrace } from './components/ReasoningTrace'
 import { SprintHealth } from './components/SprintHealth'
 import { ManagementSummary } from './ManagementSummary'
+import PMIntelligencePanel from './components/PMIntelligencePanel'
 
 const tabs = [
   { key: 'overview', label: 'Overview' },
@@ -1080,6 +1081,9 @@ function ActionsPage({ session, onSimulated }) {
                       {rec.counterfactual_statement}
                     </div>
                   )}
+
+                  {/* PM Decision Intelligence — additive; falls back to nothing if not attached */}
+                  <PMIntelligencePanel pmIntelligence={rec.pm_intelligence} variant="full" />
 
                   <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4 text-sm text-slate-400">
                     <div>Effort: <span className="text-white font-semibold">{rec.implementation_effort}</span></div>

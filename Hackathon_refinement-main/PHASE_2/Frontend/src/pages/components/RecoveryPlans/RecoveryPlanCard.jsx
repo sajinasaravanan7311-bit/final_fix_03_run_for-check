@@ -1,5 +1,5 @@
 import React from 'react'
-import { formatScheduleVariance } from '../../../api/formatters'
+import { formatScheduleVariance, formatPercent, formatNumber } from '../../../api/formatters'
 
 /**
  * RecoveryPlanCard - Individual card for a recovery plan
@@ -24,6 +24,7 @@ function RecoveryPlanCard({ plan, isRecommended, onExpand }) {
 
   const label = archetypeLabelMap[plan.archetype] || plan.archetype
   const description = archetypeDescMap[plan.archetype] || ''
+  const score = plan.score || {}
 
   return (
     <div
@@ -56,13 +57,13 @@ function RecoveryPlanCard({ plan, isRecommended, onExpand }) {
           <div className="flex items-center justify-between text-xs">
             <span className="uppercase tracking-wide text-slate-400">Deadline Probability</span>
             <span className="text-lg font-bold text-emerald-400">
-              {Math.round(plan.score.deadline_probability * 100)}%
+              {formatPercent(score.deadline_probability)}
             </span>
           </div>
           <div className="mt-1.5 h-2 w-full bg-slate-700 rounded-full overflow-hidden">
             <div
               className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400"
-              style={{ width: `${plan.score.deadline_probability * 100}%` }}
+              style={{ width: `${Math.min(100, (score.deadline_probability || 0) * 100)}%` }}
             ></div>
           </div>
         </div>
@@ -72,13 +73,15 @@ function RecoveryPlanCard({ plan, isRecommended, onExpand }) {
           <div className="flex items-center justify-between text-xs">
             <span className="uppercase tracking-wide text-slate-400">Expected Delay</span>
             <span className={`font-bold ${
-              plan.score.expected_delay_days <= 0
+              score.expected_delay_days == null
+                ? 'text-slate-400'
+                : score.expected_delay_days <= 0
                 ? 'text-emerald-400'
-                : plan.score.expected_delay_days <= 5
+                : score.expected_delay_days <= 5
                 ? 'text-amber-400'
                 : 'text-rose-400'
             }`}>
-              {formatScheduleVariance(plan.score.expected_delay_days)}
+              {formatScheduleVariance(score.expected_delay_days)}
             </span>
           </div>
         </div>
@@ -88,7 +91,7 @@ function RecoveryPlanCard({ plan, isRecommended, onExpand }) {
           <div className="flex items-center justify-between text-xs">
             <span className="uppercase tracking-wide text-slate-400">Overall Risk</span>
             <span className="font-bold text-slate-300">
-              {plan.score.overall_risk_score.toFixed(2)}
+              {formatNumber(score.overall_risk_score, 2)}
             </span>
           </div>
         </div>
@@ -98,19 +101,21 @@ function RecoveryPlanCard({ plan, isRecommended, onExpand }) {
           <div className="flex-1">
             <div className="text-xs uppercase tracking-wide text-slate-400">Actions</div>
             <div className="mt-1 text-2xl font-bold text-white">
-              {plan.score.actions_required}
+              {score.actions_required ?? '—'}
             </div>
           </div>
           <div className="flex-1">
             <div className="text-xs uppercase tracking-wide text-slate-400">Complexity</div>
             <div className={`mt-1 inline-block rounded-lg px-2.5 py-1 text-xs font-bold ${
-              plan.score.execution_complexity === 'Low'
+              score.execution_complexity === 'Low'
                 ? 'bg-emerald-500/20 text-emerald-300'
-                : plan.score.execution_complexity === 'Medium'
+                : score.execution_complexity === 'Medium'
                 ? 'bg-amber-500/20 text-amber-300'
-                : 'bg-rose-500/20 text-rose-300'
+                : score.execution_complexity === 'High'
+                ? 'bg-rose-500/20 text-rose-300'
+                : 'bg-slate-500/20 text-slate-300'
             }`}>
-              {plan.score.execution_complexity}
+              {score.execution_complexity || '—'}
             </div>
           </div>
         </div>

@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
-import { formatScheduleVariance } from '../../../api/formatters'
+import { formatScheduleVariance, formatPercent, formatNumber, formatDays } from '../../../api/formatters'
 import ApplyPlanModal from './ApplyPlanModal'
+import PMIntelligencePanel from '../PMIntelligencePanel'
 
 /**
  * PlanDetailView - Expanded view for a single recovery plan
@@ -15,6 +16,8 @@ import ApplyPlanModal from './ApplyPlanModal'
  */
 function PlanDetailView({ plan, session, onBack }) {
   const [showApplyModal, setShowApplyModal] = useState(false)
+  const score = plan.score || {}
+  const explanation = plan.explanation || {}
 
   return (
     <div className="space-y-6">
@@ -39,82 +42,90 @@ function PlanDetailView({ plan, session, onBack }) {
         <div>
           <div className="text-sm uppercase tracking-wide text-slate-400">Deadline Probability</div>
           <div className="mt-2 text-3xl font-bold text-emerald-400">
-            {Math.round(plan.score.deadline_probability * 100)}%
+            {formatPercent(score.deadline_probability)}
           </div>
         </div>
         <div>
           <div className="text-sm uppercase tracking-wide text-slate-400">Expected Delay</div>
           <div className={`mt-2 text-3xl font-bold ${
-            plan.score.expected_delay_days <= 0
+            score.expected_delay_days == null
+              ? 'text-slate-400'
+              : score.expected_delay_days <= 0
               ? 'text-emerald-400'
-              : plan.score.expected_delay_days <= 5
+              : score.expected_delay_days <= 5
               ? 'text-amber-400'
               : 'text-rose-400'
           }`}>
-            {formatScheduleVariance(plan.score.expected_delay_days)}
+            {formatScheduleVariance(score.expected_delay_days)}
           </div>
         </div>
         <div>
           <div className="text-sm uppercase tracking-wide text-slate-400">Risk Score</div>
           <div className="mt-2 text-3xl font-bold text-slate-300">
-            {plan.score.overall_risk_score.toFixed(2)}
+            {formatNumber(score.overall_risk_score, 2)}
           </div>
         </div>
         <div>
           <div className="text-sm uppercase tracking-wide text-slate-400">Complexity</div>
           <div className={`mt-2 inline-block rounded-lg px-3 py-1 text-lg font-bold ${
-            plan.score.execution_complexity === 'Low'
+            score.execution_complexity === 'Low'
               ? 'bg-emerald-500/20 text-emerald-300'
-              : plan.score.execution_complexity === 'Medium'
+              : score.execution_complexity === 'Medium'
               ? 'bg-amber-500/20 text-amber-300'
-              : 'bg-rose-500/20 text-rose-300'
+              : score.execution_complexity === 'High'
+              ? 'bg-rose-500/20 text-rose-300'
+              : 'bg-slate-500/20 text-slate-300'
           }`}>
-            {plan.score.execution_complexity}
+            {score.execution_complexity || '—'}
           </div>
         </div>
       </div>
 
       {/* Narrative Explanation */}
-      <div className="rounded-2xl border border-slate-700 bg-slate-900 p-6">
-        <h3 className="text-lg font-bold text-white">Why This Plan</h3>
-        <p className="mt-3 text-slate-300 leading-relaxed">
-          {plan.explanation.narrative_summary}
-        </p>
+      {(explanation.narrative_summary || (explanation.why_recommended || []).length > 0) && (
+        <div className="rounded-2xl border border-slate-700 bg-slate-900 p-6">
+          <h3 className="text-lg font-bold text-white">Why This Plan</h3>
+          {explanation.narrative_summary && (
+            <p className="mt-3 text-slate-300 leading-relaxed">
+              {explanation.narrative_summary}
+            </p>
+          )}
 
-        {plan.explanation.why_recommended && plan.explanation.why_recommended.length > 0 && (
-          <div className="mt-4">
-            <p className="text-sm font-semibold text-slate-300">Strengths:</p>
-            <ul className="mt-2 space-y-1">
-              {plan.explanation.why_recommended.map((reason, idx) => (
-                <li key={idx} className="flex items-start gap-2 text-sm text-slate-400">
-                  <span className="text-emerald-400 mt-0.5">✓</span>
-                  <span>{reason}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
+          {explanation.why_recommended && explanation.why_recommended.length > 0 && (
+            <div className="mt-4">
+              <p className="text-sm font-semibold text-slate-300">Strengths:</p>
+              <ul className="mt-2 space-y-1">
+                {explanation.why_recommended.map((reason, idx) => (
+                  <li key={idx} className="flex items-start gap-2 text-sm text-slate-400">
+                    <span className="text-emerald-400 mt-0.5">✓</span>
+                    <span>{reason}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
-        {plan.explanation.comparison_to_alternatives && plan.explanation.comparison_to_alternatives.length > 0 && (
-          <div className="mt-4">
-            <p className="text-sm font-semibold text-slate-300">Compared to Alternatives:</p>
-            <ul className="mt-2 space-y-1">
-              {plan.explanation.comparison_to_alternatives.map((comparison, idx) => (
-                <li key={idx} className="text-sm text-slate-400">
-                  • {comparison}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </div>
+          {explanation.comparison_to_alternatives && explanation.comparison_to_alternatives.length > 0 && (
+            <div className="mt-4">
+              <p className="text-sm font-semibold text-slate-300">Compared to Alternatives:</p>
+              <ul className="mt-2 space-y-1">
+                {explanation.comparison_to_alternatives.map((comparison, idx) => (
+                  <li key={idx} className="text-sm text-slate-400">
+                    • {comparison}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Trade-offs */}
-      {plan.explanation.trade_offs && plan.explanation.trade_offs.length > 0 && (
+      {explanation.trade_offs && explanation.trade_offs.length > 0 && (
         <div className="rounded-2xl border border-slate-700 bg-slate-900 p-6">
           <h3 className="text-lg font-bold text-white">Trade-offs & Risks</h3>
           <div className="mt-4 space-y-3">
-            {plan.explanation.trade_offs.map((tradeoff, idx) => (
+            {explanation.trade_offs.map((tradeoff, idx) => (
               <div
                 key={idx}
                 className={`rounded-lg border-l-4 p-3 ${
@@ -146,29 +157,38 @@ function PlanDetailView({ plan, session, onBack }) {
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1">
-                    <h4 className="font-semibold text-white">{action.title}</h4>
-                    <p className="mt-1 text-sm text-slate-400">{action.description}</p>
+                    <h4 className="font-semibold text-white">{action.title || 'Untitled action'}</h4>
+                    {action.description && (
+                      <p className="mt-1 text-sm text-slate-400">{action.description}</p>
+                    )}
                     <div className="mt-2 flex flex-wrap gap-2">
-                      <span className="inline-block rounded-full bg-slate-700 px-2.5 py-0.5 text-xs text-slate-300">
-                        {action.action_type}
-                      </span>
-                      <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                        action.confidence === 'HIGH'
-                          ? 'bg-emerald-500/20 text-emerald-300'
-                          : action.confidence === 'MEDIUM'
-                          ? 'bg-amber-500/20 text-amber-300'
-                          : 'bg-rose-500/20 text-rose-300'
-                      }`}>
-                        {action.confidence} confidence
-                      </span>
+                      {action.action_type && (
+                        <span className="inline-block rounded-full bg-slate-700 px-2.5 py-0.5 text-xs text-slate-300">
+                          {action.action_type}
+                        </span>
+                      )}
+                      {action.confidence && (
+                        <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                          action.confidence === 'HIGH'
+                            ? 'bg-emerald-500/20 text-emerald-300'
+                            : action.confidence === 'MEDIUM'
+                            ? 'bg-amber-500/20 text-amber-300'
+                            : 'bg-rose-500/20 text-rose-300'
+                        }`}>
+                          {action.confidence} confidence
+                        </span>
+                      )}
                     </div>
+                    <PMIntelligencePanel pmIntelligence={action.pm_intelligence} variant="compact" />
                   </div>
-                  <div className="text-right">
-                    <div className="text-sm text-slate-400">Delay reduction</div>
-                    <div className="text-xl font-bold text-emerald-400">
-                      {action.estimated_delay_reduction_days.toFixed(1)}d
+                  {action.estimated_delay_reduction_days != null && (
+                    <div className="text-right">
+                      <div className="text-sm text-slate-400">Delay reduction</div>
+                      <div className="text-xl font-bold text-emerald-400">
+                        {formatNumber(action.estimated_delay_reduction_days, 1)}d
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               </div>
             ))}

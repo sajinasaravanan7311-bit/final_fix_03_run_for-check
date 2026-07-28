@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { api } from '../../../api/client'
-import { formatScheduleVariance } from '../../../api/formatters'
+import { formatScheduleVariance, formatPercent } from '../../../api/formatters'
 
 /**
  * ApplyPlanModal - Confirmation dialog for applying a recovery plan
@@ -15,6 +15,7 @@ function ApplyPlanModal({ plan, session, onClose, onConfirm }) {
   const [applying, setApplying] = useState(false)
   const [error, setError] = useState(null)
   const [success, setSuccess] = useState(false)
+  const score = plan.score || {}
 
   const handleApply = async () => {
     try {
@@ -56,7 +57,7 @@ function ApplyPlanModal({ plan, session, onClose, onConfirm }) {
               Recovery plan {plan.archetype} has been successfully applied to your project.
             </p>
             <p className="mt-1 text-sm text-slate-400">
-              {plan.score.actions_required} actions scheduled for execution.
+              {score.actions_required ?? '—'} actions scheduled for execution.
             </p>
             <p className="mt-4 text-xs text-slate-500">Redirecting...</p>
           </div>
@@ -72,7 +73,7 @@ function ApplyPlanModal({ plan, session, onClose, onConfirm }) {
         <div className="border-b border-slate-700 p-6">
           <h2 className="text-xl font-bold text-white">Apply Recovery Plan</h2>
           <p className="mt-1 text-sm text-slate-400">
-            You are about to apply {plan.archetype.toLowerCase()} recovery plan to the project.
+            You are about to apply {(plan.archetype || '').toLowerCase()} recovery plan to the project.
           </p>
         </div>
 
@@ -87,18 +88,18 @@ function ApplyPlanModal({ plan, session, onClose, onConfirm }) {
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-slate-400">Actions</span>
-                <span className="font-semibold text-slate-200">{plan.score.actions_required}</span>
+                <span className="font-semibold text-slate-200">{score.actions_required ?? '—'}</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-slate-400">Deadline Probability</span>
                 <span className="font-semibold text-emerald-400">
-                  {Math.round(plan.score.deadline_probability * 100)}%
+                  {formatPercent(score.deadline_probability)}
                 </span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-slate-400">Expected Delay</span>
                 <span className="font-semibold text-slate-200">
-                  {formatScheduleVariance(plan.score.expected_delay_days)}
+                  {formatScheduleVariance(score.expected_delay_days)}
                 </span>
               </div>
             </div>
@@ -108,7 +109,7 @@ function ApplyPlanModal({ plan, session, onClose, onConfirm }) {
           <div className="text-sm text-slate-300">
             <p className="font-semibold mb-2">Plan will be applied with the following changes:</p>
             <ul className="space-y-1 text-slate-400">
-              <li>• All {plan.score.actions_required} recommended actions will be scheduled</li>
+              <li>• All {score.actions_required ?? 'the'} recommended actions will be scheduled</li>
               <li>• Team assignments will be updated according to the plan</li>
               <li>• Sprint schedules may be adjusted</li>
               <li>• Dependencies will be rebalanced</li>

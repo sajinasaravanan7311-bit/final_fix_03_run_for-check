@@ -10,6 +10,8 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
+from app.api.models_pm_intelligence import PMIntelligenceResponse
+
 
 class RecoveryPlanScoreResponse(BaseModel):
     """Score metrics for a recovery plan."""
@@ -51,6 +53,12 @@ class RecommendationInPlanResponse(BaseModel):
     estimated_delay_reduction_days: float = Field(..., description="Expected delay reduction in days")
     affected_item_ids: List[str] = Field(default_factory=list, description="Work items affected")
     affected_resource_ids: List[str] = Field(default_factory=list, description="Resources affected")
+    pm_intelligence: Optional[PMIntelligenceResponse] = Field(
+        None,
+        description="Full PM Decision Intelligence — identical contract to the same field on "
+                    "RecommendationSummary (GET /api/recommendations), so recovery-plan actions and "
+                    "top-level recommendations expose the same intelligence shape.",
+    )
 
 
 class RecoveryPlanResponse(BaseModel):

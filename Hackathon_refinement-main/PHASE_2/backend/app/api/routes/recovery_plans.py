@@ -23,6 +23,7 @@ from app.api.models_recovery_plans import (
     RecoveryPlanScoreResponse,
     TradeOffResponse,
 )
+from app.api.models_pm_intelligence import serialize_pm_intelligence
 from app.engines.recovery_plan_engine import RecoveryPlanEngine
 from app.engines.recommendation_engine.models import ScoringWeights
 from app.engines.recommendation_engine.recommendation_engine_v2 import RecommendationEngineV2
@@ -326,6 +327,7 @@ def _recommendation_to_api(rec) -> RecommendationInPlanResponse:
         estimated_delay_reduction_days=round(rec.estimated_delay_reduction_days, 2),
         affected_item_ids=rec.affected_item_ids,
         affected_resource_ids=rec.affected_resource_ids,
+        pm_intelligence=serialize_pm_intelligence(rec),
     )
 
 
