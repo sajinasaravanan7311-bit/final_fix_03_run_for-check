@@ -1,5 +1,6 @@
 import React from 'react'
 import { formatScheduleVariance, formatPercent, formatNumber } from '../../../api/formatters'
+import { getRecoveryPlanDisplayData } from '../normalizers'
 
 /**
  * RecoveryPlanCard - Individual card for a recovery plan
@@ -25,113 +26,59 @@ function RecoveryPlanCard({ plan, isRecommended, onExpand }) {
   const label = archetypeLabelMap[plan.archetype] || plan.archetype
   const description = archetypeDescMap[plan.archetype] || ''
   const score = plan.score || {}
+  const explanation = plan.explanation || {}
+  const displayData = getRecoveryPlanDisplayData(plan)
 
   return (
-    <div
+    <article
       onClick={onExpand}
-      className={`rounded-2xl border-2 p-6 cursor-pointer transition hover:shadow-lg ${
-        isRecommended
-          ? 'border-emerald-500 bg-emerald-500/10 hover:bg-emerald-500/15 shadow-emerald-500/20'
-          : 'border-slate-600 bg-slate-800/50 hover:bg-slate-800 hover:border-slate-500'
-      }`}
+      style={{
+        border: `1px solid ${isRecommended ? 'var(--teal)' : 'var(--line)'}`,
+        borderRadius: 7,
+        background: 'var(--panel)',
+        boxShadow: isRecommended ? 'inset 0 0 0 1px var(--teal)' : 'none',
+        padding: 11,
+        cursor: 'pointer',
+        marginBottom: 6,
+      }}
     >
-      {/* Header */}
-      <div className="flex items-start justify-between gap-3">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
         <div>
-          <div className="flex items-center gap-2">
-            <h3 className="text-lg font-bold text-white">{label}</h3>
-            {isRecommended && (
-              <span className="inline-block rounded-full bg-emerald-500 px-2.5 py-0.5 text-xs font-semibold text-slate-950">
-                ⭐ Recommended
-              </span>
-            )}
+          {isRecommended && (
+            <span style={{ color: 'var(--teal)', fontSize: 8, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.12em', display: 'block', marginBottom: 4 }}>
+              AI Recommended Strategy
+            </span>
+          )}
+          <div style={{ fontSize: 8, color: 'var(--quiet)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em' }}>
+            Strategy goal
           </div>
-          <p className="mt-1 text-sm text-slate-400">{description}</p>
+          <div style={{ fontSize: 13, fontWeight: 800, marginTop: 3 }}>
+            {displayData.strategicGoal || plan.archetype}
+          </div>
+          <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 4, maxWidth: 500 }}>
+            {displayData.expectedOutcome || description}
+          </div>
+        </div>
+        <div style={{ flexShrink: 0, border: '1px solid var(--line2)', borderRadius: 3, padding: '3px 7px', fontSize: 8, color: 'var(--quiet)' }}>
+          {plan.archetype}
         </div>
       </div>
 
-      {/* Metrics Grid */}
-      <div className="mt-6 space-y-4">
-        {/* Deadline Probability */}
-        <div>
-          <div className="flex items-center justify-between text-xs">
-            <span className="uppercase tracking-wide text-slate-400">Deadline Probability</span>
-            <span className="text-lg font-bold text-emerald-400">
-              {formatPercent(score.deadline_probability)}
-            </span>
-          </div>
-          <div className="mt-1.5 h-2 w-full bg-slate-700 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400"
-              style={{ width: `${Math.min(100, (score.deadline_probability || 0) * 100)}%` }}
-            ></div>
-          </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 6, marginTop: 10 }}>
+        <div style={{ border: '1px solid var(--line2)', borderRadius: 5, padding: '7px 8px' }}>
+          <div style={{ fontSize: 8, color: 'var(--quiet)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em' }}>Expected delay</div>
+          <div style={{ fontSize: 12, fontWeight: 800, marginTop: 2, fontFamily: 'DM Mono, monospace' }}>{formatScheduleVariance(score.expected_delay_days)}</div>
         </div>
-
-        {/* Expected Delay */}
-        <div>
-          <div className="flex items-center justify-between text-xs">
-            <span className="uppercase tracking-wide text-slate-400">Expected Delay</span>
-            <span className={`font-bold ${
-              score.expected_delay_days == null
-                ? 'text-slate-400'
-                : score.expected_delay_days <= 0
-                ? 'text-emerald-400'
-                : score.expected_delay_days <= 5
-                ? 'text-amber-400'
-                : 'text-rose-400'
-            }`}>
-              {formatScheduleVariance(score.expected_delay_days)}
-            </span>
-          </div>
+        <div style={{ border: '1px solid var(--line2)', borderRadius: 5, padding: '7px 8px' }}>
+          <div style={{ fontSize: 8, color: 'var(--quiet)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em' }}>Delivery confidence</div>
+          <div style={{ fontSize: 12, fontWeight: 800, marginTop: 2, color: 'var(--teal)' }}>{Math.round((score.deadline_probability || 0) * 100)}%</div>
         </div>
-
-        {/* Risk Score */}
-        <div>
-          <div className="flex items-center justify-between text-xs">
-            <span className="uppercase tracking-wide text-slate-400">Overall Risk</span>
-            <span className="font-bold text-slate-300">
-              {formatNumber(score.overall_risk_score, 2)}
-            </span>
-          </div>
-        </div>
-
-        {/* Actions & Complexity */}
-        <div className="flex gap-4 pt-2">
-          <div className="flex-1">
-            <div className="text-xs uppercase tracking-wide text-slate-400">Actions</div>
-            <div className="mt-1 text-2xl font-bold text-white">
-              {score.actions_required ?? '—'}
-            </div>
-          </div>
-          <div className="flex-1">
-            <div className="text-xs uppercase tracking-wide text-slate-400">Complexity</div>
-            <div className={`mt-1 inline-block rounded-lg px-2.5 py-1 text-xs font-bold ${
-              score.execution_complexity === 'Low'
-                ? 'bg-emerald-500/20 text-emerald-300'
-                : score.execution_complexity === 'Medium'
-                ? 'bg-amber-500/20 text-amber-300'
-                : score.execution_complexity === 'High'
-                ? 'bg-rose-500/20 text-rose-300'
-                : 'bg-slate-500/20 text-slate-300'
-            }`}>
-              {score.execution_complexity || '—'}
-            </div>
-          </div>
+        <div style={{ border: '1px solid var(--line2)', borderRadius: 5, padding: '7px 8px' }}>
+          <div style={{ fontSize: 8, color: 'var(--quiet)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em' }}>Risk score</div>
+          <div style={{ fontSize: 12, fontWeight: 800, marginTop: 2, fontFamily: 'DM Mono, monospace' }}>{Math.round(score.overall_risk_score || 0)}</div>
         </div>
       </div>
-
-      {/* Action Button */}
-      <button
-        onClick={(e) => {
-          e.stopPropagation()
-          onExpand()
-        }}
-        className="mt-6 w-full rounded-lg border border-slate-500 bg-slate-700/30 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-700/50 transition"
-      >
-        View Details →
-      </button>
-    </div>
+    </article>
   )
 }
 

@@ -1,5 +1,6 @@
 import React from 'react'
 import { formatScheduleVariance, formatPercent, formatNumber } from '../../../api/formatters'
+import { getRecoveryPlanDisplayData } from '../normalizers'
 
 /**
  * ComparePlansTable - Side-by-side comparison of all 3 recovery plans
@@ -12,128 +13,45 @@ import { formatScheduleVariance, formatPercent, formatNumber } from '../../../ap
  */
 function ComparePlansTable({ plans, onSelectPlan }) {
   if (!plans || plans.length === 0) {
-    return <div className="text-center text-slate-400">No plans to compare</div>
+    return <div style={{ border: '1px solid var(--line2)', borderRadius: 5, padding: '11px 12px', textAlign: 'center', color: 'var(--muted)' }}>No plans to compare</div>
   }
 
   return (
-    <div className="overflow-x-auto rounded-2xl border border-slate-700 bg-slate-900">
-      <table className="w-full text-sm">
-        <thead className="border-b border-slate-700 bg-slate-800">
-          <tr>
-            <th className="px-4 py-3 text-left font-semibold text-slate-300">Plan</th>
-            <th className="px-4 py-3 text-left font-semibold text-slate-300">Strategy</th>
-            <th className="px-4 py-3 text-center font-semibold text-slate-300">
-              <div className="text-xs uppercase tracking-wide">Deadline</div>
-              <div className="text-xs text-slate-400">Probability</div>
-            </th>
-            <th className="px-4 py-3 text-center font-semibold text-slate-300">
-              <div className="text-xs uppercase tracking-wide">Expected</div>
-              <div className="text-xs text-slate-400">Delay (days)</div>
-            </th>
-            <th className="px-4 py-3 text-center font-semibold text-slate-300">
-              <div className="text-xs uppercase tracking-wide">Risk</div>
-              <div className="text-xs text-slate-400">Score</div>
-            </th>
-            <th className="px-4 py-3 text-center font-semibold text-slate-300">
-              <div className="text-xs uppercase tracking-wide">Complexity</div>
-              <div className="text-xs text-slate-400">Actions</div>
-            </th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-slate-700">
-          {plans.map((plan) => {
-            const score = plan.score || {}
-            return (
-            <tr
-              key={plan.plan_id}
-              onClick={() => onSelectPlan(plan.plan_id)}
-              className={`cursor-pointer transition hover:bg-slate-800/50 ${
-                plan.label === 'Recommended' ? 'bg-emerald-500/10 border-l-4 border-emerald-500' : ''
-              }`}
-            >
-              {/* Plan Label */}
-              <td className="px-4 py-4">
-                <div className="flex items-center gap-2">
-                  {plan.label === 'Recommended' && (
-                    <span className="text-lg">⭐</span>
-                  )}
-                  <div>
-                    <div className="font-semibold text-slate-200">{plan.label}</div>
-                    <div className="text-xs text-slate-500">{plan.archetype}</div>
-                  </div>
-                </div>
-              </td>
-
-              {/* Strategy Description */}
-              <td className="px-4 py-4 text-xs text-slate-400">
-                {_getStrategyDescription(plan.archetype)}
-              </td>
-
-              {/* Deadline Probability */}
-              <td className="px-4 py-4">
-                <div className="text-center">
-                  <div className="text-lg font-bold text-emerald-400">
-                    {formatPercent(score.deadline_probability)}
-                  </div>
-                  <div className="mt-1 h-1.5 w-12 mx-auto bg-slate-700 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-emerald-500"
-                      style={{ width: `${Math.min(100, (score.deadline_probability || 0) * 100)}%` }}
-                    ></div>
-                  </div>
-                </div>
-              </td>
-
-              {/* Expected Delay */}
-              <td className="px-4 py-4 text-center">
-                <div className={`font-semibold ${
-                  score.expected_delay_days == null
-                    ? 'text-slate-400'
-                    : score.expected_delay_days <= 0
-                    ? 'text-emerald-400'
-                    : score.expected_delay_days <= 5
-                    ? 'text-amber-400'
-                    : 'text-rose-400'
-                }`}>
-                  {formatScheduleVariance(score.expected_delay_days)}
-                </div>
-              </td>
-
-              {/* Risk Score */}
-              <td className="px-4 py-4 text-center">
-                <div className="font-semibold text-slate-300">
-                  {formatNumber(score.overall_risk_score, 2)}
-                </div>
-              </td>
-
-              {/* Complexity & Actions */}
-              <td className="px-4 py-4">
-                <div className="text-center">
-                  <div className={`inline-block rounded-full px-2.5 py-1 text-xs font-semibold ${
-                    score.execution_complexity === 'Low'
-                      ? 'bg-emerald-500/20 text-emerald-300'
-                      : score.execution_complexity === 'Medium'
-                      ? 'bg-amber-500/20 text-amber-300'
-                      : score.execution_complexity === 'High'
-                      ? 'bg-rose-500/20 text-rose-300'
-                      : 'bg-slate-500/20 text-slate-300'
-                  }`}>
-                    {score.execution_complexity || '—'}
-                  </div>
-                  <div className="mt-1 text-xs text-slate-500">
-                    {score.actions_required ?? '—'} {score.actions_required === 1 ? 'action' : 'actions'}
-                  </div>
-                </div>
-              </td>
-            </tr>
-          )})}
-        </tbody>
-      </table>
-
-      {/* Instructions */}
-      <div className="border-t border-slate-700 bg-slate-800 px-4 py-3 text-center text-xs text-slate-400">
-        Click a row to view detailed plan breakdown
+    <div style={{ border: '1px solid var(--line2)', borderRadius: 5, overflow: 'hidden' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr 1fr 1fr 1fr 1fr 1fr', background: 'var(--panel2)' }}>
+        {['Strategy goal', 'Delivery confidence', 'Delay change', 'Implementation cost', 'Execution speed', 'Forecast stability', 'AI confidence'].map((header) => (
+          <div key={header} style={{ padding: '7px 8px', borderRight: '1px solid var(--line2)', fontSize: 8, color: 'var(--quiet)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em' }}>{header}</div>
+        ))}
       </div>
+
+      {plans.map((plan) => {
+        const score = plan.score || {}
+        const actions = plan.actions || []
+        const displayData = getRecoveryPlanDisplayData(plan)
+        const implementationCost = actions.reduce((sum, action) => sum + (Number(action.estimated_hours) || 0), 0)
+        const executionSpeed = actions.some((action) => action.urgency === 'TODAY') ? 'Fast (immediate)' : 'Moderate (sprint-paced)'
+        const aiConfidence = displayData.forecastConfidence || score.confidence || score.overall_confidence || '—'
+        const isRecommended = plan.is_recommended || plan.label === 'Recommended'
+
+        return (
+          <div
+            key={plan.plan_id}
+            onClick={() => onSelectPlan(plan.plan_id)}
+            style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr 1fr 1fr 1fr 1fr 1fr', borderTop: '1px solid var(--line2)', fontSize: 9, cursor: 'pointer', background: isRecommended ? 'rgba(115, 225, 178, 0.08)' : 'transparent' }}
+          >
+            <div style={{ padding: '7px 8px', borderRight: '1px solid var(--line2)' }}>
+              <div style={{ fontWeight: 800, fontSize: 9 }}>{displayData.strategicGoal || plan.archetype}</div>
+              {isRecommended && <div style={{ color: 'var(--teal)', fontSize: 8, marginTop: 2 }}>AI recommended</div>}
+            </div>
+            <div style={{ padding: '7px 8px', borderRight: '1px solid var(--line2)', color: 'var(--teal)', fontWeight: 800 }}>{Math.round((score.deadline_probability || 0) * 100)}%</div>
+            <div style={{ padding: '7px 8px', borderRight: '1px solid var(--line2)', fontFamily: 'DM Mono, monospace' }}>{formatScheduleVariance(score.expected_delay_days)}</div>
+            <div style={{ padding: '7px 8px', borderRight: '1px solid var(--line2)' }}>{implementationCost}h</div>
+            <div style={{ padding: '7px 8px', borderRight: '1px solid var(--line2)', color: 'var(--muted)' }}>{executionSpeed}</div>
+            <div style={{ padding: '7px 8px', borderRight: '1px solid var(--line2)', color: 'var(--muted)' }}>{displayData.forecastConfidence || '—'}</div>
+            <div style={{ padding: '7px 8px', color: aiConfidence === 'HIGH' ? 'var(--teal)' : 'var(--yellow)', fontWeight: 800 }}>{aiConfidence}</div>
+          </div>
+        )
+      })}
     </div>
   )
 }

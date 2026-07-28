@@ -104,23 +104,31 @@ function RecoveryPlansPage({ session }) {
       <div className="flex gap-2">
         <button
           onClick={() => setView('cards')}
-          className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
-            view === 'cards'
-              ? 'bg-emerald-500 text-slate-950'
-              : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-          }`}
+          style={{
+            border: view === 'cards' ? '1px solid var(--teal)' : '1px solid var(--line)',
+            background: view === 'cards' ? 'oklch(36% .12 168)' : 'var(--panel)',
+            color: view === 'cards' ? 'var(--text)' : 'var(--muted)',
+            borderRadius: 4,
+            padding: '5px 9px',
+            fontSize: 9,
+            cursor: 'pointer',
+          }}
         >
-          Plans Overview
+          Strategy Overview
         </button>
         <button
           onClick={() => setView('compare')}
-          className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
-            view === 'compare'
-              ? 'bg-emerald-500 text-slate-950'
-              : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-          }`}
+          style={{
+            border: view === 'compare' ? '1px solid var(--teal)' : '1px solid var(--line)',
+            background: view === 'compare' ? 'oklch(36% .12 168)' : 'var(--panel)',
+            color: view === 'compare' ? 'var(--text)' : 'var(--muted)',
+            borderRadius: 4,
+            padding: '5px 9px',
+            fontSize: 9,
+            cursor: 'pointer',
+          }}
         >
-          Compare Plans
+          Compare Strategies
         </button>
       </div>
 

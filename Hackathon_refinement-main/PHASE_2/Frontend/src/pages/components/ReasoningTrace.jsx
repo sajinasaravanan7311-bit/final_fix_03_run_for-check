@@ -6,14 +6,15 @@ import { api } from '../../api/client'
 // ---------------------------------------------------------------------------
 function Badge({ children, color = 'slate' }) {
   const map = {
-    slate:   'bg-slate-700 text-slate-200',
-    emerald: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30',
-    amber:   'bg-amber-500/20 text-amber-300 border border-amber-500/30',
-    rose:    'bg-rose-500/20 text-rose-300 border border-rose-500/30',
-    sky:     'bg-sky-500/20 text-sky-300 border border-sky-500/30',
+    slate:   { bg: 'var(--panel2)', text: 'var(--text)', border: '1px solid var(--line)' },
+    emerald: { bg: 'rgba(115, 225, 178, 0.12)', text: 'var(--teal)', border: '1px solid rgba(115, 225, 178, 0.26)' },
+    amber:   { bg: 'rgba(255, 151, 80, 0.12)', text: 'var(--orange)', border: '1px solid rgba(255, 151, 80, 0.24)' },
+    rose:    { bg: 'rgba(226, 90, 123, 0.12)', text: 'var(--pink)', border: '1px solid rgba(226, 90, 123, 0.26)' },
+    sky:     { bg: 'rgba(29, 158, 155, 0.12)', text: 'var(--teal)', border: '1px solid rgba(29, 158, 155, 0.24)' },
   }
+  const current = map[color] || map.slate
   return (
-    <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold ${map[color] || map.slate}`}>
+    <span style={{ display: 'inline-block', borderRadius: 999, padding: '2px 8px', fontSize: 9, fontWeight: 700, background: current.bg, color: current.text, border: current.border }}>
       {children}
     </span>
   )
@@ -38,9 +39,9 @@ function FieldRow({ label, value, mono = false }) {
   if (value === undefined || value === null || value === '') return null
   const display = typeof value === 'object' ? formatSignal(value) : String(value)
   return (
-    <div className="grid grid-cols-[10rem_1fr] gap-3 py-2 border-b border-slate-800/60 last:border-0">
-      <div className="text-xs uppercase tracking-[0.15em] text-slate-500 pt-0.5 leading-5">{label}</div>
-      <div className={`text-sm text-slate-200 leading-6 ${mono ? 'font-mono text-xs whitespace-pre-wrap' : ''}`}>
+    <div className="grid grid-cols-[10rem_1fr] gap-3 py-2" style={{ borderBottom: '1px solid var(--line)', borderTop: 0 }}>
+      <div className="pt-0.5 leading-5 uppercase" style={{ fontSize: 9, letterSpacing: '0.15em', color: 'var(--muted)' }}>{label}</div>
+      <div style={{ fontSize: mono ? 9 : 10, color: 'var(--text)', lineHeight: 1.6, whiteSpace: mono ? 'pre-wrap' : 'normal', fontFamily: mono ? 'DM Mono, monospace' : 'inherit' }}>
         {display}
       </div>
     </div>
@@ -63,31 +64,32 @@ function Panel({ index, title, subtitle, badge, badgeColor = 'slate', defaultOpe
   const [open, setOpen] = useState(defaultOpen)
 
   return (
-    <div className={`rounded-3xl border ${missing ? 'border-slate-700/40 opacity-60' : 'border-slate-700'} bg-slate-900 overflow-hidden`}>
+    <div className="overflow-hidden" style={{ borderRadius: 7, border: missing ? '1px solid var(--line)' : '1px solid var(--line)', background: 'var(--panel)', opacity: missing ? 0.7 : 1 }}>
       <button
         onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center justify-between gap-4 p-5 text-left hover:bg-slate-800/40 transition"
+        className="w-full flex items-center justify-between gap-4 p-5 text-left transition"
+        style={{ background: 'var(--panel2)' }}
       >
         <div className="flex items-center gap-3 min-w-0">
-          <span className="flex-none w-7 h-7 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-xs font-bold text-slate-400">
+          <span className="flex-none w-7 h-7 rounded-full flex items-center justify-center" style={{ border: '1px solid var(--line)', background: 'var(--panel)', fontSize: 9, fontWeight: 700, color: 'var(--muted)' }}>
             {index}
           </span>
           <div className="min-w-0">
-            <div className="text-sm font-semibold text-white truncate">{title}</div>
-            {subtitle && <div className="text-xs text-slate-500 mt-0.5 truncate">{subtitle}</div>}
+            <div className="truncate" style={{ fontSize: 10, fontWeight: 700, color: 'var(--text)' }}>{title}</div>
+            {subtitle && <div className="mt-0.5 truncate" style={{ fontSize: 9, color: 'var(--muted)' }}>{subtitle}</div>}
           </div>
         </div>
         <div className="flex items-center gap-2 flex-none">
           {badge && <Badge color={badgeColor}>{badge}</Badge>}
           {missing && <Badge color="slate">No data</Badge>}
-          <span className="text-slate-500 text-xs">{open ? '▲' : '▼'}</span>
+          <span style={{ color: 'var(--muted)', fontSize: 9 }}>{open ? '▲' : '▼'}</span>
         </div>
       </button>
 
       {open && (
-        <div className="px-5 pb-5 pt-1 border-t border-slate-800">
+        <div className="px-5 pb-5 pt-1" style={{ borderTop: '1px solid var(--line)' }}>
           {missing ? (
-            <p className="text-sm text-slate-500 italic py-3">
+            <p className="py-3 italic" style={{ fontSize: 10, color: 'var(--muted)' }}>
               This pipeline stage did not produce output in this session.
             </p>
           ) : children}
@@ -127,10 +129,10 @@ function ObservationPanel({ data }) {
           )}
           {(cluster.observations || cluster.signals) && (
             <div className="mt-3">
-              <div className="text-xs uppercase tracking-[0.15em] text-slate-500 mb-2">Signals</div>
+              <div className="mb-2 uppercase" style={{ fontSize: 9, letterSpacing: '0.15em', color: 'var(--muted)' }}>Signals</div>
               <div className="space-y-1">
                 {(Array.isArray(cluster.observations) ? cluster.observations : Array.isArray(cluster.signals) ? cluster.signals : []).map((s, i) => (
-                  <div key={i} className="flex items-center justify-between gap-3 rounded-2xl bg-slate-800/60 px-3 py-2 text-xs text-slate-300">
+                  <div key={i} className="flex items-center justify-between gap-3 px-3 py-2" style={{ borderRadius: 7, background: 'var(--panel2)', fontSize: 9, color: 'var(--text)' }}>
                     <span className="capitalize">{typeof s === 'string' ? s : formatSignal(s)}</span>
                     {typeof s === 'object' && s?.significance && <Pill label={s.significance} severity={s.significance} />}
                   </div>
@@ -170,11 +172,11 @@ function DiagnosisPanel({ data }) {
 
           {diag.causal_chain?.length > 0 && (
             <div className="mt-4">
-              <div className="text-xs uppercase tracking-[0.15em] text-slate-500 mb-2">Causal chain</div>
+              <div className="mb-2 uppercase" style={{ fontSize: 9, letterSpacing: '0.15em', color: 'var(--muted)' }}>Causal chain</div>
               <ol className="space-y-2">
                 {diag.causal_chain.map((step, i) => (
-                  <li key={i} className="flex gap-3 text-sm text-slate-300">
-                    <span className="flex-none w-5 h-5 rounded-full bg-amber-500/20 text-amber-300 text-xs flex items-center justify-center font-semibold">{i + 1}</span>
+                  <li key={i} className="flex gap-3" style={{ fontSize: 10, color: 'var(--text)' }}>
+                    <span className="flex-none w-5 h-5 rounded-full flex items-center justify-center font-semibold" style={{ background: 'rgba(255, 151, 80, 0.12)', color: 'var(--orange)', fontSize: 9 }}>{i + 1}</span>
                     <span>{typeof step === 'string' ? step : JSON.stringify(step)}</span>
                   </li>
                 ))}
@@ -184,11 +186,11 @@ function DiagnosisPanel({ data }) {
 
           {diag.five_whys?.length > 0 && (
             <div className="mt-4">
-              <div className="text-xs uppercase tracking-[0.15em] text-slate-500 mb-2">Five Whys</div>
+              <div className="mb-2 uppercase" style={{ fontSize: 9, letterSpacing: '0.15em', color: 'var(--muted)' }}>Five Whys</div>
               <ol className="space-y-2">
                 {diag.five_whys.map((why, i) => (
-                  <li key={i} className="flex gap-3 text-sm text-slate-300">
-                    <span className="flex-none w-5 h-5 rounded-full bg-sky-500/20 text-sky-300 text-xs flex items-center justify-center font-semibold">{i + 1}</span>
+                  <li key={i} className="flex gap-3" style={{ fontSize: 10, color: 'var(--text)' }}>
+                    <span className="flex-none w-5 h-5 rounded-full flex items-center justify-center font-semibold" style={{ background: 'rgba(29, 158, 155, 0.12)', color: 'var(--teal)', fontSize: 9 }}>{i + 1}</span>
                     <span>{typeof why === 'string' ? why : JSON.stringify(why)}</span>
                   </li>
                 ))}
@@ -198,10 +200,10 @@ function DiagnosisPanel({ data }) {
 
           {diag.eliminated?.length > 0 && (
             <div className="mt-4">
-              <div className="text-xs uppercase tracking-[0.15em] text-slate-500 mb-2">Eliminated hypotheses</div>
+              <div className="mb-2 uppercase" style={{ fontSize: 9, letterSpacing: '0.15em', color: 'var(--muted)' }}>Eliminated hypotheses</div>
               <div className="flex flex-wrap gap-2">
                 {diag.eliminated.map((h, i) => (
-                  <span key={i} className="rounded-full bg-slate-800 border border-slate-700 px-3 py-1 text-xs text-slate-400 line-through">
+                  <span key={i} className="rounded-full px-3 py-1 line-through" style={{ background: 'var(--panel2)', border: '1px solid var(--line)', color: 'var(--muted)', fontSize: 9 }}>
                     {typeof h === 'string' ? h : JSON.stringify(h)}
                   </span>
                 ))}
@@ -211,10 +213,10 @@ function DiagnosisPanel({ data }) {
 
           {surviving?.length > 0 && (
             <div className="mt-4">
-              <div className="text-xs uppercase tracking-[0.15em] text-slate-500 mb-2">Surviving hypotheses</div>
+              <div className="mb-2 uppercase" style={{ fontSize: 9, letterSpacing: '0.15em', color: 'var(--muted)' }}>Surviving hypotheses</div>
               <div className="flex flex-wrap gap-2">
                 {surviving.map((h, i) => (
-                  <span key={i} className="rounded-full bg-emerald-500/10 border border-emerald-500/30 px-3 py-1 text-xs text-emerald-300">
+                  <span key={i} className="rounded-full px-3 py-1" style={{ background: 'rgba(115, 225, 178, 0.12)', border: '1px solid rgba(115, 225, 178, 0.26)', color: 'var(--teal)', fontSize: 9 }}>
                     {typeof h === 'string' ? h : JSON.stringify(h)}
                   </span>
                 ))}
@@ -252,18 +254,18 @@ function ImpactPanel({ data }) {
             const mag = typeof val === 'object' ? val?.magnitude : typeof val === 'number' ? val : null
             const magNum = typeof mag === 'number' && !Number.isNaN(mag) ? mag : null
             const pct = magNum !== null ? Math.min(100, (magNum / 10) * 100) : 0
-            const color = pct >= 70 ? 'bg-rose-500' : pct >= 40 ? 'bg-amber-500' : 'bg-emerald-500'
+            const color = pct >= 70 ? 'var(--pink)' : pct >= 40 ? 'var(--orange)' : 'var(--teal)'
             return (
               <div key={dim} className="space-y-1">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-slate-300 capitalize">{dim.replace(/_/g, ' ')}</span>
-                  <span className="font-semibold text-white">{magNum !== null ? magNum.toFixed(1) : '—'}<span className="text-slate-500 text-xs">/10</span></span>
+                <div className="flex items-center justify-between" style={{ fontSize: 10 }}>
+                  <span style={{ color: 'var(--text)', textTransform: 'capitalize' }}>{dim.replace(/_/g, ' ')}</span>
+                  <span style={{ fontWeight: 700, color: 'var(--text)' }}>{magNum !== null ? magNum.toFixed(1) : '—'}<span style={{ color: 'var(--muted)', fontSize: 9 }}>/10</span></span>
                 </div>
-                <div className="h-2 rounded-full bg-slate-800">
-                  <div className={`${color} h-2 rounded-full transition-all`} style={{ width: `${pct}%` }} />
+                <div className="h-2" style={{ borderRadius: 999, background: 'var(--panel2)' }}>
+                  <div className="h-2 transition-all" style={{ width: `${pct}%`, borderRadius: 999, background: color }} />
                 </div>
                 {typeof val === 'object' && (val?.sacrifice_statement || val?.explanation) && (
-                  <div className="text-xs text-slate-500 italic">{val.sacrifice_statement || val.explanation}</div>
+                  <div style={{ fontSize: 9, color: 'var(--muted)', fontStyle: 'italic' }}>{val.sacrifice_statement || val.explanation}</div>
                 )}
               </div>
             )
@@ -293,25 +295,25 @@ function TradeoffsPanel({ data }) {
       {tm && (
         <div className="mt-3 space-y-3">
           {options.map((opt, i) => (
-            <div key={i} className="rounded-2xl border border-slate-700 bg-slate-800/60 p-4">
+            <div key={i} className="p-4" style={{ borderRadius: 7, border: '1px solid var(--line)', background: 'var(--panel2)' }}>
               <div className="flex items-center justify-between gap-3 mb-2">
-                <span className="text-sm font-semibold text-white">{opt.label ?? opt.name ?? `Option ${i + 1}`}</span>
+                <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text)' }}>{opt.label ?? opt.name ?? `Option ${i + 1}`}</span>
                 {opt.net_expected_value !== undefined && (
-                  <span className={`text-sm font-bold ${opt.net_expected_value > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: opt.net_expected_value > 0 ? 'var(--teal)' : 'var(--pink)' }}>
                     EV: {opt.net_expected_value > 0 ? '+' : ''}{opt.net_expected_value?.toFixed(2)}
                   </span>
                 )}
               </div>
               {opt.rejection_reason && (
-                <div className="text-xs text-slate-400 italic">Rejected: {opt.rejection_reason}</div>
+                <div style={{ fontSize: 9, color: 'var(--muted)', fontStyle: 'italic' }}>Rejected: {opt.rejection_reason}</div>
               )}
               {opt.description && (
-                <div className="text-xs text-slate-300 mt-1">{opt.description}</div>
+                <div className="mt-1" style={{ fontSize: 9, color: 'var(--text)' }}>{opt.description}</div>
               )}
             </div>
           ))}
           {options.length === 0 && (
-            <div className="text-sm text-slate-500 py-2">No tradeoff options recorded.</div>
+            <div className="py-2" style={{ fontSize: 10, color: 'var(--muted)' }}>No tradeoff options recorded.</div>
           )}
         </div>
       )}
@@ -340,24 +342,24 @@ function DecisionPanel({ data }) {
       {decision && (
         <div className="space-y-4 mt-3">
           {chosen && (
-            <div className="rounded-2xl border border-emerald-500/40 bg-emerald-500/5 p-4">
-              <div className="text-xs uppercase tracking-[0.15em] text-emerald-400 mb-1">Chosen action</div>
-              <div className="text-sm font-semibold text-white">{chosen.label ?? chosen.name ?? chosen.action ?? JSON.stringify(chosen)}</div>
+            <div className="p-4" style={{ borderRadius: 7, border: '1px solid rgba(115, 225, 178, 0.26)', background: 'rgba(115, 225, 178, 0.08)' }}>
+              <div className="mb-1 uppercase" style={{ fontSize: 9, letterSpacing: '0.15em', color: 'var(--teal)' }}>Chosen action</div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text)' }}>{chosen.label ?? chosen.name ?? chosen.action ?? JSON.stringify(chosen)}</div>
               {chosen.net_expected_value !== undefined && (
-                <div className="mt-2 text-xs text-emerald-300">Expected value: {chosen.net_expected_value > 0 ? '+' : ''}{chosen.net_expected_value?.toFixed(2)}</div>
+                <div className="mt-2" style={{ fontSize: 9, color: 'var(--teal)' }}>Expected value: {chosen.net_expected_value > 0 ? '+' : ''}{chosen.net_expected_value?.toFixed(2)}</div>
               )}
             </div>
           )}
 
           {decision.rejected_alternatives?.length > 0 && (
             <div>
-              <div className="text-xs uppercase tracking-[0.15em] text-slate-500 mb-2">Rejected alternatives</div>
+              <div className="mb-2 uppercase" style={{ fontSize: 9, letterSpacing: '0.15em', color: 'var(--muted)' }}>Rejected alternatives</div>
               <div className="space-y-2">
                 {decision.rejected_alternatives.map((alt, i) => (
-                  <div key={i} className="rounded-2xl border border-slate-700 bg-slate-800/40 p-3">
-                    <div className="text-sm text-slate-300">{alt.label ?? alt.name ?? JSON.stringify(alt)}</div>
+                  <div key={i} className="p-3" style={{ borderRadius: 7, border: '1px solid var(--line)', background: 'var(--panel2)' }}>
+                    <div style={{ fontSize: 10, color: 'var(--text)' }}>{alt.label ?? alt.name ?? JSON.stringify(alt)}</div>
                     {alt.rejection_reason && (
-                      <div className="text-xs text-slate-500 mt-1 italic">{alt.rejection_reason}</div>
+                      <div className="mt-1 italic" style={{ fontSize: 9, color: 'var(--muted)' }}>{alt.rejection_reason}</div>
                     )}
                   </div>
                 ))}
@@ -395,11 +397,11 @@ function RecoveryPlansPanel({ data }) {
             const prob = plan?.score?.deadline_probability ?? plan?.deadline_probability
             const actions = plan?.actions ?? plan?.recommended_actions ?? []
             return (
-              <div key={i} className="rounded-2xl border border-slate-700 bg-slate-800/50 p-4">
+              <div key={i} className="p-4" style={{ borderRadius: 7, border: '1px solid var(--line)', background: 'var(--panel2)' }}>
                 <div className="flex items-center justify-between gap-3 mb-2">
-                  <span className="text-sm font-semibold text-white">{plan.archetype ?? plan.name ?? `Plan ${i + 1}`}</span>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text)' }}>{plan.archetype ?? plan.name ?? `Plan ${i + 1}`}</span>
                   {prob !== undefined && (
-                    <span className={`text-sm font-bold ${prob >= 0.7 ? 'text-emerald-400' : prob >= 0.4 ? 'text-amber-400' : 'text-rose-400'}`}>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: prob >= 0.7 ? 'var(--teal)' : prob >= 0.4 ? 'var(--orange)' : 'var(--pink)' }}>
                       {Math.round(prob * 100)}% on-time
                     </span>
                   )}
@@ -407,13 +409,13 @@ function RecoveryPlansPanel({ data }) {
                 {actions.length > 0 && (
                   <ul className="mt-2 space-y-1">
                     {actions.slice(0, 4).map((a, j) => (
-                      <li key={j} className="text-xs text-slate-400 flex gap-2">
-                        <span className="text-slate-600">•</span>
+                      <li key={j} className="flex gap-2" style={{ fontSize: 9, color: 'var(--muted)' }}>
+                        <span style={{ color: 'var(--line)' }}>•</span>
                         <span>{typeof a === 'string' ? a : (a?.action ?? a?.description ?? JSON.stringify(a))}</span>
                       </li>
                     ))}
                     {actions.length > 4 && (
-                      <li className="text-xs text-slate-600 pl-4">+{actions.length - 4} more actions</li>
+                      <li className="pl-4" style={{ fontSize: 9, color: 'var(--line)' }}>+{actions.length - 4} more actions</li>
                     )}
                   </ul>
                 )}
@@ -423,7 +425,7 @@ function RecoveryPlansPanel({ data }) {
         </div>
       )}
       {!missing && arr.length === 0 && (
-        <p className="text-sm text-slate-500 py-3">No recovery plans available.</p>
+        <p className="py-3" style={{ fontSize: 10, color: 'var(--muted)' }}>No recovery plans available.</p>
       )}
     </Panel>
   )
@@ -464,12 +466,11 @@ function RecoveryStatePanel({ data }) {
               const c = STATE_COLOR[state]
               return (
                 <React.Fragment key={state}>
-                  <div className={`flex-1 rounded-2xl py-2 px-1 text-center text-xs font-semibold transition
-                    ${isCurrent ? `${c.bg} text-white shadow-lg` : isPast ? 'bg-slate-700 text-slate-400' : 'bg-slate-800/60 text-slate-600'}`}>
+                  <div className="flex-1 py-2 px-1 text-center font-semibold transition" style={{ borderRadius: 7, fontSize: 9, background: isCurrent ? c.bg : isPast ? 'var(--panel2)' : 'var(--panel)', color: isCurrent ? 'var(--text)' : isPast ? 'var(--muted)' : 'var(--muted)' }}>
                     {state}
                   </div>
                   {i < STATE_ORDER.length - 1 && (
-                    <span className="text-slate-700 text-xs flex-none">→</span>
+                    <span className="flex-none" style={{ color: 'var(--line)', fontSize: 9 }}>→</span>
                   )}
                 </React.Fragment>
               )
@@ -519,31 +520,31 @@ function AdvisorPanel({ data }) {
       {output && (
         <div className="mt-3 space-y-4">
           {output.executive_summary && (
-            <div className="rounded-2xl border border-slate-700 bg-slate-800/50 p-4">
-              <div className="text-xs uppercase tracking-[0.15em] text-amber-400 mb-2">Executive summary</div>
-              <p className="text-sm text-slate-200 leading-6">{output.executive_summary}</p>
+            <div className="p-4" style={{ borderRadius: 7, border: '1px solid var(--line)', background: 'var(--panel2)' }}>
+              <div className="mb-2 uppercase" style={{ fontSize: 9, letterSpacing: '0.15em', color: 'var(--orange)' }}>Executive summary</div>
+              <p style={{ fontSize: 10, color: 'var(--text)', lineHeight: 1.6 }}>{output.executive_summary}</p>
             </div>
           )}
           {output.reasoning_explanation && (
-            <div className="rounded-2xl border border-slate-700 bg-slate-800/50 p-4">
-              <div className="text-xs uppercase tracking-[0.15em] text-sky-400 mb-2">Reasoning explanation</div>
-              <p className="text-sm text-slate-300 leading-6">{output.reasoning_explanation}</p>
+            <div className="p-4" style={{ borderRadius: 7, border: '1px solid var(--line)', background: 'var(--panel2)' }}>
+              <div className="mb-2 uppercase" style={{ fontSize: 9, letterSpacing: '0.15em', color: 'var(--teal)' }}>Reasoning explanation</div>
+              <p style={{ fontSize: 10, color: 'var(--text)', lineHeight: 1.6 }}>{output.reasoning_explanation}</p>
             </div>
           )}
           {output.decision_explanation && (
-            <div className="rounded-2xl border border-slate-700 bg-slate-800/50 p-4">
-              <div className="text-xs uppercase tracking-[0.15em] text-emerald-400 mb-2">Decision explanation</div>
-              <p className="text-sm text-slate-300 leading-6">{output.decision_explanation}</p>
+            <div className="p-4" style={{ borderRadius: 7, border: '1px solid var(--line)', background: 'var(--panel2)' }}>
+              <div className="mb-2 uppercase" style={{ fontSize: 9, letterSpacing: '0.15em', color: 'var(--teal)' }}>Decision explanation</div>
+              <p style={{ fontSize: 10, color: 'var(--text)', lineHeight: 1.6 }}>{output.decision_explanation}</p>
             </div>
           )}
           {output.confidence_statement && (
-            <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4">
-              <div className="text-xs uppercase tracking-[0.15em] text-amber-400 mb-2">Confidence statement</div>
-              <p className="text-sm text-amber-200 leading-6">{output.confidence_statement}</p>
+            <div className="p-4" style={{ borderRadius: 7, border: '1px solid rgba(255, 151, 80, 0.24)', background: 'rgba(255, 151, 80, 0.08)' }}>
+              <div className="mb-2 uppercase" style={{ fontSize: 9, letterSpacing: '0.15em', color: 'var(--orange)' }}>Confidence statement</div>
+              <p style={{ fontSize: 10, color: 'var(--text)', lineHeight: 1.6 }}>{output.confidence_statement}</p>
             </div>
           )}
           {isFallback && (
-            <p className="text-xs text-slate-500 italic">
+            <p style={{ fontSize: 9, color: 'var(--muted)', fontStyle: 'italic' }}>
               Generated by deterministic fallback renderer — LLM path unavailable or not configured.
             </p>
           )}
@@ -573,7 +574,8 @@ function ExportButton({ traceData, sessionId }) {
   return (
     <button
       onClick={handleExport}
-      className="rounded-2xl border border-slate-600 bg-slate-800 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-700 transition flex items-center gap-2"
+      className="flex items-center gap-2 px-4 py-2 transition"
+      style={{ borderRadius: 7, border: '1px solid var(--line)', background: 'var(--panel)', color: 'var(--text)', fontSize: 10, fontWeight: 700 }}
     >
       <span>⬇</span> Export JSON
     </button>
@@ -638,19 +640,18 @@ export function ReasoningTrace({ session }) {
   return (
     <div className="space-y-4">
       {/* Header */}
-      <section className="rounded-3xl border border-slate-700 bg-slate-950/90 p-6">
+      <section className="p-6" style={{ borderRadius: 7, border: '1px solid var(--line)', background: 'var(--panel)' }}>
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-sm uppercase tracking-[0.3em] text-amber-400">Reasoning Trace</p>
-            <h2 className="mt-2 text-2xl font-bold text-white">Full Pipeline Reasoning</h2>
-            <p className="mt-1 text-sm text-slate-400">
+            <p className="uppercase" style={{ fontSize: 9, letterSpacing: '0.3em', color: 'var(--orange)' }}>Reasoning Trace</p>
+            <h2 className="mt-2" style={{ fontSize: 13, fontWeight: 800, color: 'var(--text)' }}>Full Pipeline Reasoning</h2>
+            <p className="mt-1" style={{ fontSize: 10, color: 'var(--muted)' }}>
               8 collapsible stages — observe the engine's complete reasoning chain from signal to advisor output.
             </p>
           </div>
           <ExportButton traceData={trace} sessionId={sessionId} />
         </div>
 
-        {/* Quick stats strip */}
         <div className="mt-5 flex flex-wrap gap-3">
           {[
             { label: 'Observation', key: 'observation_cluster' },
@@ -667,8 +668,8 @@ export function ReasoningTrace({ session }) {
             return (
               <div
                 key={key}
-                className={`rounded-2xl px-3 py-1.5 text-xs font-semibold flex items-center gap-1.5
-                  ${present ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30' : 'bg-slate-800 text-slate-500 border border-slate-700'}`}
+                className="flex items-center gap-1.5 px-3 py-1.5"
+                style={{ borderRadius: 7, fontSize: 9, fontWeight: 700, background: present ? 'rgba(115, 225, 178, 0.12)' : 'var(--panel2)', color: present ? 'var(--teal)' : 'var(--muted)', border: present ? '1px solid rgba(115, 225, 178, 0.26)' : '1px solid var(--line)' }}
               >
                 <span>{present ? '✓' : '○'}</span>
                 {label}
@@ -691,7 +692,8 @@ export function ReasoningTrace({ session }) {
       <div className="flex justify-end">
         <button
           onClick={load}
-          className="rounded-2xl border border-slate-600 bg-slate-800 px-4 py-2 text-sm font-semibold text-slate-300 hover:bg-slate-700 transition"
+          className="px-4 py-2 transition"
+          style={{ borderRadius: 7, border: '1px solid var(--line)', background: 'var(--panel)', color: 'var(--text)', fontSize: 10, fontWeight: 700 }}
         >
           Refresh trace
         </button>

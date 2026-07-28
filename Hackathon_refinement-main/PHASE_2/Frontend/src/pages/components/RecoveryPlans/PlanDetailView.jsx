@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { formatScheduleVariance, formatPercent, formatNumber, formatDays } from '../../../api/formatters'
 import ApplyPlanModal from './ApplyPlanModal'
 import PMIntelligencePanel from '../PMIntelligencePanel'
+import { getRecoveryPlanDisplayData } from '../normalizers'
 
 /**
  * PlanDetailView - Expanded view for a single recovery plan
@@ -18,10 +19,10 @@ function PlanDetailView({ plan, session, onBack }) {
   const [showApplyModal, setShowApplyModal] = useState(false)
   const score = plan.score || {}
   const explanation = plan.explanation || {}
+  const displayData = getRecoveryPlanDisplayData(plan)
 
   return (
-    <div className="space-y-6">
-      {/* Back Button & Header */}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
       <div className="flex items-center gap-4">
         <button
           onClick={onBack}
@@ -37,193 +38,147 @@ function PlanDetailView({ plan, session, onBack }) {
         </div>
       </div>
 
-      {/* Metrics Summary */}
-      <div className="grid gap-4 grid-cols-1 md:grid-cols-4 rounded-2xl border border-slate-700 bg-slate-900 p-6">
-        <div>
-          <div className="text-sm uppercase tracking-wide text-slate-400">Deadline Probability</div>
-          <div className="mt-2 text-3xl font-bold text-emerald-400">
-            {formatPercent(score.deadline_probability)}
-          </div>
-        </div>
-        <div>
-          <div className="text-sm uppercase tracking-wide text-slate-400">Expected Delay</div>
-          <div className={`mt-2 text-3xl font-bold ${
-            score.expected_delay_days == null
-              ? 'text-slate-400'
-              : score.expected_delay_days <= 0
-              ? 'text-emerald-400'
-              : score.expected_delay_days <= 5
-              ? 'text-amber-400'
-              : 'text-rose-400'
-          }`}>
-            {formatScheduleVariance(score.expected_delay_days)}
-          </div>
-        </div>
-        <div>
-          <div className="text-sm uppercase tracking-wide text-slate-400">Risk Score</div>
-          <div className="mt-2 text-3xl font-bold text-slate-300">
-            {formatNumber(score.overall_risk_score, 2)}
-          </div>
-        </div>
-        <div>
-          <div className="text-sm uppercase tracking-wide text-slate-400">Complexity</div>
-          <div className={`mt-2 inline-block rounded-lg px-3 py-1 text-lg font-bold ${
-            score.execution_complexity === 'Low'
-              ? 'bg-emerald-500/20 text-emerald-300'
-              : score.execution_complexity === 'Medium'
-              ? 'bg-amber-500/20 text-amber-300'
-              : score.execution_complexity === 'High'
-              ? 'bg-rose-500/20 text-rose-300'
-              : 'bg-slate-500/20 text-slate-300'
-          }`}>
-            {score.execution_complexity || '—'}
-          </div>
-        </div>
-      </div>
-
-      {/* Narrative Explanation */}
-      {(explanation.narrative_summary || (explanation.why_recommended || []).length > 0) && (
-        <div className="rounded-2xl border border-slate-700 bg-slate-900 p-6">
-          <h3 className="text-lg font-bold text-white">Why This Plan</h3>
-          {explanation.narrative_summary && (
-            <p className="mt-3 text-slate-300 leading-relaxed">
-              {explanation.narrative_summary}
-            </p>
-          )}
-
-          {explanation.why_recommended && explanation.why_recommended.length > 0 && (
-            <div className="mt-4">
-              <p className="text-sm font-semibold text-slate-300">Strengths:</p>
-              <ul className="mt-2 space-y-1">
-                {explanation.why_recommended.map((reason, idx) => (
-                  <li key={idx} className="flex items-start gap-2 text-sm text-slate-400">
-                    <span className="text-emerald-400 mt-0.5">✓</span>
-                    <span>{reason}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {explanation.comparison_to_alternatives && explanation.comparison_to_alternatives.length > 0 && (
-            <div className="mt-4">
-              <p className="text-sm font-semibold text-slate-300">Compared to Alternatives:</p>
-              <ul className="mt-2 space-y-1">
-                {explanation.comparison_to_alternatives.map((comparison, idx) => (
-                  <li key={idx} className="text-sm text-slate-400">
-                    • {comparison}
-                  </li>
-                ))}
-              </ul>
+      <div style={{ marginTop: 10 }}>
+        <div style={{ border: '1px solid var(--line)', borderRadius: 7, background: 'var(--panel)', padding: 11, marginBottom: 9 }}>
+          <div style={{ color: 'var(--orange)', fontSize: 8, fontWeight: 800, letterSpacing: '.18em', textTransform: 'uppercase' }}>Why this strategy</div>
+          <div style={{ fontSize: 14, fontWeight: 800, marginTop: 4 }}>{displayData.strategicGoal || plan.archetype}</div>
+          <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 4, maxWidth: 600 }}>{displayData.expectedOutcome || explanation.narrative_summary || 'No explanation available.'}</div>
+          {explanation.why_selected && explanation.why_selected.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+              {explanation.why_selected.map((reason, idx) => (
+                <span key={`${reason}-${idx}`} style={{ border: '1px solid var(--line2)', borderRadius: 4, padding: '4px 8px', fontSize: 9 }}>{reason}</span>
+              ))}
             </div>
           )}
         </div>
-      )}
 
-      {/* Trade-offs */}
-      {explanation.trade_offs && explanation.trade_offs.length > 0 && (
-        <div className="rounded-2xl border border-slate-700 bg-slate-900 p-6">
-          <h3 className="text-lg font-bold text-white">Trade-offs & Risks</h3>
-          <div className="mt-4 space-y-3">
-            {explanation.trade_offs.map((tradeoff, idx) => (
-              <div
-                key={idx}
-                className={`rounded-lg border-l-4 p-3 ${
-                  tradeoff.severity === 'high'
-                    ? 'border-rose-500 bg-rose-500/10'
-                    : tradeoff.severity === 'medium'
-                    ? 'border-amber-500 bg-amber-500/10'
-                    : 'border-slate-500 bg-slate-500/10'
-                }`}
-              >
-                <p className="text-sm text-slate-300">{tradeoff.description}</p>
+        <div style={{ border: '1px solid var(--line)', borderRadius: 7, background: 'var(--panel)', padding: 11, marginBottom: 9 }}>
+          <div style={{ color: 'var(--orange)', fontSize: 8, fontWeight: 800, letterSpacing: '.18em', textTransform: 'uppercase' }}>Project state change</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 6, marginTop: 8 }}>
+            <div style={{ border: '1px solid var(--line2)', borderRadius: 5, padding: '7px 8px' }}>
+              <div style={{ fontSize: 8, color: 'var(--quiet)', textTransform: 'uppercase' }}>Delivery confidence</div>
+              <div style={{ fontSize: 9, color: 'var(--muted)', marginTop: 2 }}>{displayData.baselineDeadlineProbability != null ? `${Math.round(displayData.baselineDeadlineProbability * 100)}%` : '—'}</div>
+              <div style={{ fontSize: 12, color: 'var(--teal)', fontWeight: 800, marginTop: 2 }}>→ {score.deadline_probability != null ? `${Math.round(score.deadline_probability * 100)}%` : '—'}</div>
+            </div>
+            <div style={{ border: '1px solid var(--line2)', borderRadius: 5, padding: '7px 8px' }}>
+              <div style={{ fontSize: 8, color: 'var(--quiet)', textTransform: 'uppercase' }}>Expected delay</div>
+              <div style={{ fontSize: 9, color: 'var(--muted)', marginTop: 2 }}>{displayData.baselineDelayDays != null ? displayData.baselineDelayDays : '—'}</div>
+              <div style={{ fontSize: 12, color: 'var(--teal)', fontWeight: 800, marginTop: 2 }}>→ {formatScheduleVariance(score.expected_delay_days)}</div>
+            </div>
+            <div style={{ border: '1px solid var(--line2)', borderRadius: 5, padding: '7px 8px' }}>
+              <div style={{ fontSize: 8, color: 'var(--quiet)', textTransform: 'uppercase' }}>Risk score</div>
+              <div style={{ fontSize: 9, color: 'var(--muted)', marginTop: 2 }}>{displayData.baselineRiskScore ?? '—'}</div>
+              <div style={{ fontSize: 12, color: 'var(--teal)', fontWeight: 800, marginTop: 2 }}>→ {Math.round(score.overall_risk_score || 0)}</div>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ border: '1px solid var(--line)', borderRadius: 7, background: 'var(--panel)', padding: 11, marginBottom: 9 }}>
+          <div style={{ color: 'var(--orange)', fontSize: 8, fontWeight: 800, letterSpacing: '.18em', textTransform: 'uppercase' }}>Execution timeline</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8, marginTop: 8 }}>
+            {[
+              { key: 'TODAY', label: 'Immediate (today)' },
+              { key: 'THIS_SPRINT', label: 'This sprint' },
+              { key: 'NEXT_SPRINT', label: 'Before next planning' },
+            ].map((phase) => (
+              <div key={phase.key} style={{ border: '1px solid var(--line2)', borderRadius: 5, padding: '8px 9px' }}>
+                <div style={{ fontSize: 8, color: 'var(--quiet)', textTransform: 'uppercase' }}>{phase.label}</div>
+                <ul style={{ paddingLeft: 14, margin: '6px 0 0', color: 'var(--muted)', fontSize: 9 }}>
+                  {(plan.actions || []).filter((action) => action.urgency === phase.key).map((action, idx) => (
+                    <li key={`${action.title}-${idx}`} style={{ marginBottom: 4 }}><span style={{ color: 'var(--teal)', fontWeight: 800 }}>→ </span><strong style={{ color: 'var(--text)' }}>{action.title || 'Untitled action'}</strong> {action.description ? `· ${action.description}` : ''}</li>
+                  ))}
+                </ul>
               </div>
             ))}
           </div>
         </div>
-      )}
 
-      {/* Actions in Plan */}
-      {plan.actions && plan.actions.length > 0 && (
-        <div className="rounded-2xl border border-slate-700 bg-slate-900 p-6">
-          <h3 className="text-lg font-bold text-white">
-            Actions in This Plan ({plan.actions.length})
-          </h3>
-          <div className="mt-4 space-y-3">
-            {plan.actions.map((action) => (
-              <div
-                key={action.recommendation_id}
-                className="rounded-lg border border-slate-700 bg-slate-800 p-4"
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1">
-                    <h4 className="font-semibold text-white">{action.title || 'Untitled action'}</h4>
-                    {action.description && (
-                      <p className="mt-1 text-sm text-slate-400">{action.description}</p>
-                    )}
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {action.action_type && (
-                        <span className="inline-block rounded-full bg-slate-700 px-2.5 py-0.5 text-xs text-slate-300">
-                          {action.action_type}
-                        </span>
-                      )}
-                      {action.confidence && (
-                        <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                          action.confidence === 'HIGH'
-                            ? 'bg-emerald-500/20 text-emerald-300'
-                            : action.confidence === 'MEDIUM'
-                            ? 'bg-amber-500/20 text-amber-300'
-                            : 'bg-rose-500/20 text-rose-300'
-                        }`}>
-                          {action.confidence} confidence
-                        </span>
-                      )}
-                    </div>
-                    <PMIntelligencePanel pmIntelligence={action.pm_intelligence} variant="compact" />
-                  </div>
-                  {action.estimated_delay_reduction_days != null && (
-                    <div className="text-right">
-                      <div className="text-sm text-slate-400">Delay reduction</div>
-                      <div className="text-xl font-bold text-emerald-400">
-                        {formatNumber(action.estimated_delay_reduction_days, 1)}d
-                      </div>
-                    </div>
-                  )}
+        <div style={{ border: '1px solid var(--line)', borderRadius: 7, background: 'var(--panel)', padding: 11, marginBottom: 9 }}>
+          <div style={{ color: 'var(--orange)', fontSize: 8, fontWeight: 800, letterSpacing: '.18em', textTransform: 'uppercase' }}>Decision gates</div>
+          {displayData.decisionGates && displayData.decisionGates.length > 0 ? (
+            <ol style={{ paddingLeft: 18, margin: '8px 0 0', color: 'var(--muted)', fontSize: 9 }}>
+              {displayData.decisionGates.map((gate, idx) => (
+                <li key={`${gate}-${idx}`} style={{ marginBottom: 4 }}><span style={{ color: 'var(--orange)', fontWeight: 800, marginRight: 6 }}>Gate {idx + 1}</span>{gate}</li>
+              ))}
+            </ol>
+          ) : (
+            <div style={{ fontSize: 9, color: 'var(--muted)', marginTop: 8 }}>No explicit decision gates — review at end of each sprint phase.</div>
+          )}
+        </div>
+
+        <div style={{ border: '1px solid var(--line)', borderRadius: 7, background: 'var(--panel)', padding: 11, marginBottom: 9 }}>
+          <div style={{ color: 'var(--orange)', fontSize: 8, fontWeight: 800, letterSpacing: '.18em', textTransform: 'uppercase' }}>Success criteria</div>
+          {displayData.successCriteria && displayData.successCriteria.length > 0 ? (
+            <ul style={{ paddingLeft: 16, margin: '8px 0 0', color: 'var(--muted)', fontSize: 9 }}>
+              {displayData.successCriteria.map((item, idx) => <li key={`${item}-${idx}`} style={{ marginBottom: 4 }}><span style={{ color: 'var(--teal)', fontWeight: 800 }}>✓ </span>{item}</li>)}
+            </ul>
+          ) : (
+            <div style={{ fontSize: 9, color: 'var(--muted)', marginTop: 8 }}>Derived from expected outcome above.</div>
+          )}
+        </div>
+
+        <div style={{ border: '1px solid var(--line)', borderRadius: 7, background: 'var(--panel)', padding: 11, marginBottom: 9 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8 }}>
+            <div style={{ border: '1px solid var(--line2)', borderRadius: 5, padding: '7px 8px' }}>
+              <div style={{ fontSize: 8, color: 'var(--yellow)', textTransform: 'uppercase', letterSpacing: '.08em' }}>Trade-offs</div>
+              <ul style={{ paddingLeft: 14, margin: '6px 0 0', color: 'var(--muted)', fontSize: 9 }}>
+                {(explanation.trade_offs || []).map((tradeoff, idx) => <li key={`${tradeoff.description}-${idx}`} style={{ marginBottom: 4 }}>{tradeoff.description}</li>)}
+              </ul>
+            </div>
+            <div style={{ border: '1px solid var(--line2)', borderRadius: 5, padding: '7px 8px' }}>
+              <div style={{ fontSize: 8, color: 'var(--quiet)', textTransform: 'uppercase', letterSpacing: '.08em' }}>Implementation cost</div>
+              <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div style={{ border: '1px solid var(--line2)', borderRadius: 5, padding: '7px 8px' }}>
+                  <div style={{ fontSize: 8, color: 'var(--quiet)', textTransform: 'uppercase' }}>Capacity</div>
+                  <div style={{ fontSize: 12, fontWeight: 800, marginTop: 2 }}>{(plan.actions || []).reduce((sum, action) => sum + (Number(action.estimated_hours) || 0), 0)}h</div>
+                </div>
+                <div style={{ border: '1px solid var(--line2)', borderRadius: 5, padding: '7px 8px' }}>
+                  <div style={{ fontSize: 8, color: 'var(--quiet)', textTransform: 'uppercase' }}>Teams affected</div>
+                  <div style={{ fontSize: 12, fontWeight: 800, marginTop: 2 }}>{new Set((plan.actions || []).map((action) => action.action_type)).size}</div>
+                </div>
+                <div style={{ border: '1px solid var(--line2)', borderRadius: 5, padding: '7px 8px' }}>
+                  <div style={{ fontSize: 8, color: 'var(--quiet)', textTransform: 'uppercase' }}>Actions</div>
+                  <div style={{ fontSize: 12, fontWeight: 800, marginTop: 2 }}>{(plan.actions || []).length}</div>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ border: '1px solid var(--line)', borderRadius: 7, background: 'var(--panel)', padding: 11, marginBottom: 9 }}>
+          <div style={{ color: 'var(--orange)', fontSize: 8, fontWeight: 800, letterSpacing: '.18em', textTransform: 'uppercase' }}>Action detail</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.35fr) 86px 86px 72px', gap: 0, marginTop: 8 }}>
+            <div style={{ border: '1px solid var(--line2)', padding: '7px 8px', fontSize: 8, color: 'var(--quiet)', fontWeight: 800, textTransform: 'uppercase' }}>Action</div>
+            <div style={{ border: '1px solid var(--line2)', padding: '7px 8px', fontSize: 8, color: 'var(--quiet)', fontWeight: 800, textTransform: 'uppercase' }}>Owner</div>
+            <div style={{ border: '1px solid var(--line2)', padding: '7px 8px', fontSize: 8, color: 'var(--quiet)', fontWeight: 800, textTransform: 'uppercase' }}>Timing</div>
+            <div style={{ border: '1px solid var(--line2)', padding: '7px 8px', fontSize: 8, color: 'var(--quiet)', fontWeight: 800, textTransform: 'uppercase' }}>Confidence</div>
+            {(plan.actions || []).map((action, idx) => (
+              <React.Fragment key={`${action.title}-${idx}`}>
+                <div style={{ border: '1px solid var(--line2)', padding: '7px 8px', fontSize: 9, color: 'var(--text)' }}>{action.title || 'Untitled action'}</div>
+                <div style={{ border: '1px solid var(--line2)', padding: '7px 8px', fontSize: 9, color: 'var(--muted)' }}>{action.assigned_resource || action.assignedResource || action.owner || action.assigned_to || action.action_type || '—'}</div>
+                <div style={{ border: '1px solid var(--line2)', padding: '7px 8px', fontSize: 9, color: 'var(--muted)' }}>{action.urgency || '—'}</div>
+                <div style={{ border: '1px solid var(--line2)', padding: '7px 8px', fontSize: 9, fontWeight: 800, color: action.confidence === 'HIGH' ? 'var(--teal)' : 'var(--yellow)' }}>{action.confidence || '—'}</div>
+              </React.Fragment>
             ))}
           </div>
         </div>
-      )}
 
-      {/* Revised Sprint Plan */}
-      {plan.revised_sprint_plan && plan.revised_sprint_plan.length > 0 && (
-        <div className="rounded-2xl border border-slate-700 bg-slate-900 p-6">
-          <h3 className="text-lg font-bold text-white">Revised Sprint Plan</h3>
-          <div className="mt-4 overflow-x-auto">
-            {/* Placeholder for sprint plan table */}
-            <p className="text-sm text-slate-400">Sprint assignments and resource allocation after plan applied</p>
-          </div>
+        <div style={{ display: 'flex', gap: 3, marginTop: 4 }}>
+          <button
+            onClick={() => setShowApplyModal(true)}
+            style={{ flex: 1, border: 'none', background: 'var(--teal)', color: 'var(--bg)', borderRadius: 4, padding: '10px 12px', fontWeight: 800, cursor: 'pointer' }}
+          >
+            Apply This Plan
+          </button>
+          <button
+            onClick={onBack}
+            style={{ border: '1px solid var(--line)', background: 'var(--panel)', color: 'var(--muted)', borderRadius: 4, padding: '10px 12px', cursor: 'pointer' }}
+          >
+            Cancel
+          </button>
         </div>
-      )}
-
-      {/* Apply Plan Button */}
-      <div className="flex gap-3">
-        <button
-          onClick={() => setShowApplyModal(true)}
-          className="flex-1 rounded-lg bg-emerald-500 px-6 py-3 text-lg font-bold text-slate-950 hover:bg-emerald-400 transition"
-        >
-          Apply This Plan
-        </button>
-        <button
-          onClick={onBack}
-          className="rounded-lg border border-slate-600 bg-slate-800 px-6 py-3 font-medium text-slate-300 hover:bg-slate-700 transition"
-        >
-          Cancel
-        </button>
       </div>
 
-      {/* Apply Modal */}
       {showApplyModal && (
         <ApplyPlanModal
           plan={plan}

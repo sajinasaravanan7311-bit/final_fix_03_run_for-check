@@ -3,17 +3,19 @@ import { AlertTriangle, CheckCircle2, Clock3, Users, ShieldAlert } from 'lucide-
 import { api } from '../api/client'
 import { formatScheduleVariance } from '../api/formatters'
 import RecoveryPlansPage from './components/RecoveryPlans'
+import RecommendationsPage from './components/Recommendations'
 import { ReasoningTrace } from './components/ReasoningTrace'
 import { SprintHealth } from './components/SprintHealth'
 import { ManagementSummary } from './ManagementSummary'
 import PMIntelligencePanel from './components/PMIntelligencePanel'
 
 const tabs = [
-  { key: 'overview', label: 'Overview' },
+  { key: 'overview',              label: 'Overview' },
+  { key: 'recommendations',       label: '🎯 Recommendations' },
+  { key: 'recovery-plans',        label: 'Recovery Plans' },
   { key: 'delivery_intelligence', label: 'Delivery Intelligence' },
-  { key: 'recovery-plans', label: 'Recovery Plans' },
-  { key: 'sprint-health', label: '🏥 Sprint Health' },
-  { key: 'reasoning-trace', label: '🧠 Reasoning Trace' },
+  { key: 'sprint-health',         label: '🏥 Sprint Health' },
+  { key: 'reasoning-trace',       label: '🧠 Reasoning Trace' },
 ]
 
 function MetricCard({label, value}){
@@ -21,6 +23,22 @@ function MetricCard({label, value}){
     <div className="rounded-2xl border border-slate-700 bg-slate-900 p-4">
       <div className="text-sm uppercase tracking-[0.2em] text-slate-400">{label}</div>
       <div className="mt-3 text-2xl font-semibold text-white">{value}</div>
+    </div>
+  )
+}
+
+function KpiTile({ label, value, color = '', note }) {
+  const colorMap = {
+    teal:   'var(--teal)',
+    yellow: 'var(--yellow)',
+    pink:   'var(--pink)',
+    orange: 'var(--orange)',
+  }
+  return (
+    <div style={{ border: '1px solid var(--line2)', borderRadius: 5, background: 'oklch(17% .036 255)', padding: '8px 9px' }}>
+      <span style={{ display: 'block', color: 'var(--quiet)', fontSize: 8, fontWeight: 800, letterSpacing: '.11em', textTransform: 'uppercase' }}>{label}</span>
+      <div style={{ fontSize: 15, fontWeight: 800, marginTop: 2, color: colorMap[color] || 'var(--text)' }}>{value || '—'}</div>
+      {note && <div style={{ color: 'var(--muted)', fontSize: 8, marginTop: 1 }}>{note}</div>}
     </div>
   )
 }
@@ -60,21 +78,21 @@ function OverviewPage({ session, onNavigate }) {
   return (
     <div>
       <HeroBanner session={session} onNavigate={onNavigate} />
-      <section className="rounded-3xl border border-slate-700 bg-slate-900 p-6 shadow-inner shadow-black/20 mt-6">
+      <section style={{ border: '1px solid var(--line)', borderRadius: 8, background: 'var(--panel)', padding: '11px 12px', marginTop: 9 }}>
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="text-sm uppercase tracking-[0.3em] text-amber-400">Project Overview</p>
-            <h2 className="mt-2 text-3xl font-extrabold text-white">{summary.project_name}</h2>
-            <p className="mt-2 text-sm text-slate-400">{summary.customer} · Managed by {summary.project_manager}</p>
+            <h2 style={{ fontSize: 14, fontWeight: 800, marginTop: 4 }}>{summary.project_name}</h2>
+            <p style={{ fontSize: 10, color: 'var(--muted)', marginTop: 3 }}>{summary.customer} · Managed by {summary.project_manager}</p>
           </div>
 
         </div>
 
-        <div className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <MetricCard label="Sprints" value={`${summary.completed_sprints ?? '—'} / ${summary.total_sprints ?? '—'}`} />
-          <MetricCard label="Blockers active" value={blockerLoading ? '…' : (blockerCount ?? '—')} />
-          <MetricCard label="Work items" value={summary.total_work_items ?? '—'} />
-          <MetricCard label="Dependencies" value={summary.total_dependencies ?? '—'} />
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 6, marginTop: 9 }}>
+          <KpiTile label="Sprints" value={`${summary.completed_sprints ?? '—'} / ${summary.total_sprints ?? '—'}`} />
+          <KpiTile label="Blockers active" value={blockerLoading ? '…' : (blockerCount ?? '—')} color="pink" />
+          <KpiTile label="Work items" value={summary.total_work_items ?? '—'} />
+          <KpiTile label="Dependencies" value={summary.total_dependencies ?? '—'} />
         </div>
       </section>
     </div>
@@ -125,119 +143,37 @@ function HeroBanner({ session, onNavigate }) {
   const forecast = snap?.forecast || {}
   const strip = snap?.emios_strip || {}
 
-  const prob = mc.on_time_probability !== undefined ? Math.round(mc.on_time_probability * 100) : null
-  const expected = typeof forecast.expected_delay_days === 'number' ? Math.round(forecast.expected_delay_days) : null
-  const riskLevel = snap?.risk?.overall_risk_level || mc.on_time_risk_level || null
-
-  const probColor = prob === null ? 'text-slate-400'
-    : prob >= 70 ? 'text-emerald-400'
-    : prob >= 40 ? 'text-amber-400'
-    : 'text-rose-400'
-
-  const probLabel = prob === null ? 'No data'
-    : prob >= 70 ? 'On track'
-    : prob >= 40 ? 'At risk'
-    : 'Critical risk'
-
-  const delayText = expected === null ? null : formatScheduleVariance(expected)
+  const prob = mc.deadline_probability != null ? Math.round(mc.deadline_probability * 100) : '—'
+  const delayText = mc.expected_delay_days != null ? formatScheduleVariance(mc.expected_delay_days) : '—'
 
   return (
-    <section className="rounded-3xl border border-slate-700 bg-slate-900 p-6 shadow-inner shadow-black/20">
-      <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-end gap-5">
-          <div>
-            <p className="text-sm uppercase tracking-[0.3em] text-slate-400">On-time probability</p>
-            <div className={`mt-1 text-8xl font-extrabold leading-none ${probColor}`}>
-              {prob !== null ? `${prob}%` : '—'}
-            </div>
-            <div className={`mt-2 text-sm font-semibold uppercase tracking-[0.15em] ${probColor}`}>{probLabel}</div>
-            {expected !== null && expected > 0 && (
-              <div className="mt-2 flex items-center gap-2">
-                <span className="inline-block w-2 h-2 rounded-full bg-rose-500"></span>
-                <span className="text-sm text-rose-300 font-semibold">{delayText}</span>
-              </div>
-            )}
-            {expected !== null && expected <= 0 && (
-              <div className="mt-2 text-sm text-emerald-400">{delayText}</div>
-            )}
+    <div className="summary" style={{ border: '1px solid var(--line)', borderRadius: 8, background: 'var(--panel)', padding: '11px 12px', marginBottom: 9 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}>
+        <div>
+          <div style={{ color: 'var(--orange)', fontSize: 8, fontWeight: 800, letterSpacing: '.18em', textTransform: 'uppercase' }}>AI project verdict</div>
+          <div style={{ fontSize: 14, fontWeight: 800, marginTop: 4, maxWidth: 600 }}>{strip.reasoning_explanation || 'Analyzing project…'}</div>
+          <div style={{ color: 'var(--muted)', fontSize: 10, marginTop: 4, maxWidth: 600 }}>
+            {strip.confidence_pct}% confidence · Root cause: {strip.root_cause || '—'}
           </div>
         </div>
-        <div className="flex flex-col gap-3">
-          <button
-            onClick={() => onNavigate && onNavigate('recovery-plans')}
-            className="rounded-2xl border border-amber-500 bg-amber-500/15 px-6 py-3 text-sm font-bold text-amber-200 hover:bg-amber-500/25 transition text-center"
-          >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 5, alignItems: 'flex-end' }}>
+          <button onClick={() => onNavigate('recommendations')}
+            style={{ border: '1px solid var(--teal)', background: 'var(--teal)', color: 'var(--bg)', borderRadius: 4, padding: '6px 10px', fontSize: 9, fontWeight: 800, cursor: 'pointer' }}>
             What should I do? →
           </button>
-          <button
-            onClick={() => onNavigate && onNavigate('recovery-plans')}
-            className="rounded-2xl border border-sky-500 bg-sky-500/10 px-6 py-3 text-sm font-semibold text-sky-200 hover:bg-sky-500/20 transition text-center"
-          >
-            Recovery Plans →
+          <button onClick={() => onNavigate('recovery-plans')}
+            style={{ border: '1px solid var(--line)', background: 'var(--panel2)', color: 'var(--muted)', borderRadius: 4, padding: '6px 10px', fontSize: 9, cursor: 'pointer' }}>
+            See recovery options →
           </button>
-          <button
-            onClick={() => onNavigate && onNavigate('reasoning-trace')}
-            className="rounded-2xl border border-slate-600 bg-slate-800 px-6 py-3 text-sm font-semibold text-slate-200 hover:bg-slate-700 transition text-center"
-          >
-            🧠 Why? →
-          </button>
-          {riskLevel && (
-            <div className="text-center text-xs uppercase tracking-[0.2em] text-slate-500">
-              Risk level: <span className={`font-semibold ${probColor}`}>{riskLevel}</span>
-            </div>
-          )}
         </div>
       </div>
 
-      {/* EMIOS Diagnosis Strip — data from sessionSnapshot.emios_strip */}
-      {snap && (strip.root_cause || strip.chosen_action || strip.recovery_state || strip.reasoning_explanation) && (
-        <div className="mt-6 border-t border-slate-800 pt-5 space-y-4">
-          {strip.root_cause && (
-            <div className="flex flex-wrap items-start gap-3">
-              <span className="flex-none text-xs uppercase tracking-[0.15em] text-slate-500 pt-1 w-28">Root cause</span>
-              <div className="flex-1">
-                <span className="text-sm font-semibold text-rose-200">{strip.root_cause}</span>
-                {strip.confidence_pct !== null && strip.confidence_pct !== undefined && (
-                  <span className={`ml-3 text-xs font-semibold px-2 py-0.5 rounded-full ${
-                    strip.confidence_pct >= 70 ? 'bg-emerald-500/20 text-emerald-300' :
-                    strip.confidence_pct >= 50 ? 'bg-amber-500/20 text-amber-300' :
-                    'bg-rose-500/20 text-rose-300'
-                  }`}>
-                    {strip.confidence_pct}% confidence
-                  </span>
-                )}
-              </div>
-            </div>
-          )}
-          {strip.chosen_action && (
-            <div className="flex flex-wrap items-start gap-3">
-              <span className="flex-none text-xs uppercase tracking-[0.15em] text-slate-500 pt-1 w-28">Recommended</span>
-              <span className="flex-1 text-sm text-emerald-200 font-semibold">{strip.chosen_action}</span>
-            </div>
-          )}
-          {strip.recovery_state && (
-            <div className="flex flex-wrap items-start gap-3">
-              <span className="flex-none text-xs uppercase tracking-[0.15em] text-slate-500 pt-1 w-28">Project state</span>
-              <span className={`text-xs font-bold px-3 py-1 rounded-full ${
-                strip.recovery_state === 'CRITICAL' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40' :
-                strip.recovery_state === 'RECOVERY' ? 'bg-orange-500/20 text-orange-300 border border-orange-500/40' :
-                strip.recovery_state === 'WARNING' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' :
-                strip.recovery_state === 'WATCH' ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40' :
-                'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-              }`}>
-                {strip.recovery_state}
-              </span>
-            </div>
-          )}
-          {strip.reasoning_explanation && (
-            <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 px-4 py-3">
-              <span className="text-xs uppercase tracking-[0.15em] text-amber-400">Why this diagnosis</span>
-              <p className="mt-1 text-sm text-amber-100 leading-6">{strip.reasoning_explanation}</p>
-            </div>
-          )}
-        </div>
-      )}
-    </section>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, marginTop: 11 }}>
+        <KpiTile label="Decision needed by" value={strip.urgency_window || 'This sprint'} color="orange" note="Based on blocker age and critical path" />
+        <KpiTile label="Delay exposure" value={delayText} color="yellow" note="Monte Carlo P50 · if no action taken" />
+        <KpiTile label="AI confidence" value={`${prob}%`} color="teal" note={`${strip.confidence_pct || '—'}% forecast confidence`} />
+      </div>
+    </div>
   )
 }
 
@@ -1672,32 +1608,44 @@ export function Dashboard({session, onReset}){
 
   return (
     <div className="space-y-6">
-      <div className="rounded-3xl border border-slate-700 bg-slate-950/90 p-4">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div style={{
+        border: '1px solid var(--line)',
+        borderRadius: '9px',
+        padding: '11px 12px 0',
+        background: 'oklch(14% .034 255)',
+      }}>
+        <div className="flex justify-between items-start">
           <div>
-            <p className="text-sm uppercase tracking-[0.3em] text-amber-400">Session dashboard</p>
-            <h2 className="mt-2 text-2xl font-bold text-white">Project analytics</h2>
+            <div className="text-[8px] font-extrabold tracking-[0.18em] uppercase text-[var(--orange)]">Session dashboard</div>
+            <div className="text-[16px] font-extrabold tracking-tight mt-1">Project analytics</div>
           </div>
-          <button onClick={onReset} className="rounded-2xl border border-rose-500 bg-rose-500/10 px-4 py-2 text-sm font-semibold text-rose-200 transition hover:bg-rose-500/20">
+          <button onClick={onReset} style={{ border: '1px solid var(--pink)', borderRadius: 4, padding: '5px 8px', fontSize: 9, cursor: 'pointer', background: 'transparent', color: 'var(--pink)' }}>
             New Project
           </button>
         </div>
 
-        <div className="sticky top-0 z-20 mt-5 -mx-2 px-2 pt-2 pb-2 flex flex-wrap gap-2 bg-slate-950/95 backdrop-blur border-b border-slate-800">
+        <nav className="flex gap-[5px] overflow-x-auto mt-2.5">
           {tabs.map(tab => (
             <button
               key={tab.key}
               onClick={() => setActive(tab.key)}
-              className={`rounded-full px-4 py-2 text-sm font-semibold transition whitespace-nowrap ${
-                active === tab.key
-                  ? 'bg-amber-500 text-slate-950 shadow-lg shadow-amber-500/30'
-                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white'
-              }`}
+              style={{
+                border: `1px solid ${active === tab.key ? 'var(--orange)' : 'var(--line2)'}`,
+                borderBottom: 0,
+                borderRadius: '999px 999px 0 0',
+                background: active === tab.key ? 'var(--orange)' : 'var(--panel)',
+                color: active === tab.key ? 'var(--bg)' : 'var(--muted)',
+                padding: '5px 10px',
+                fontSize: 9,
+                fontWeight: active === tab.key ? 800 : 400,
+                whiteSpace: 'nowrap',
+                cursor: 'pointer',
+              }}
             >
               {tab.label}
             </button>
           ))}
-        </div>
+        </nav>
       </div>
 
       {active === 'delivery_intelligence' && <ManagementSummary session={session} />}
@@ -1705,6 +1653,7 @@ export function Dashboard({session, onReset}){
         <OverviewPage session={session} onNavigate={setActive} />
         <DelayDiagnosis session={session} />
       </>}
+      {active === 'recommendations' && <RecommendationsPage session={session} onNavigate={setActive} />}
 
       {active === 'recovery-plans' && <RecoveryPlansPage session={session} />}
       {active === 'sprint-health' && <SprintHealth session={session} />}

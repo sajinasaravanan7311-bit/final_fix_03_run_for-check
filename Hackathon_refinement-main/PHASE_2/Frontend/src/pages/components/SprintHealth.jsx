@@ -42,22 +42,30 @@ function cx(...args) { return args.filter(Boolean).join(' ') }
 
 // ─── Shared components ────────────────────────────────────────────────────────
 function Badge({ children, color = 'slate', size = 'sm' }) {
-  const c = COLOR_CLS[color] || COLOR_CLS.slate
-  const sz = size === 'xs' ? 'text-xs px-2 py-0.5' : 'text-xs px-2.5 py-1 font-semibold'
-  return <span className={cx('inline-flex items-center gap-1 rounded-full border', c.bg, c.text, c.border, sz)}>{children}</span>
+  const palette = {
+    rose: { color: 'var(--pink)', border: '1px solid var(--line)' },
+    orange: { color: 'var(--orange)', border: '1px solid var(--line)' },
+    amber: { color: 'var(--orange)', border: '1px solid var(--line)' },
+    sky: { color: 'var(--teal)', border: '1px solid var(--line)' },
+    emerald: { color: 'var(--teal)', border: '1px solid var(--line)' },
+    slate: { color: 'var(--muted)', border: '1px solid var(--line)' },
+  }
+  const active = palette[color] || palette.slate
+  const pad = size === 'xs' ? { padding: '2px 6px', fontSize: 9 } : { padding: '4px 8px', fontSize: 9, fontWeight: 700 }
+  return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, borderRadius: 999, border: active.border, color: active.color, background: 'var(--panel2)', ...pad }}>{children}</span>
 }
 
 function SkillPill({ required, primary, secondary, exact, affinity }) {
   const color = exact ? 'emerald' : affinity ? 'amber' : 'rose'
   const label = exact ? 'Exact match' : affinity ? 'Related skill' : 'Mismatch'
   return (
-    <div className="flex flex-wrap items-center gap-2 text-xs">
-      <span className="text-slate-500">Required:</span>
-      <span className="text-white font-semibold">{required}</span>
-      <span className="text-slate-600">|</span>
-      <span className="text-slate-500">Owner primary:</span>
-      <span className="text-slate-300">{primary}</span>
-      {secondary && <><span className="text-slate-600">·</span><span className="text-slate-400">{secondary}</span></>}
+    <div className="flex flex-wrap items-center gap-2" style={{ fontSize: 9 }}>
+      <span style={{ color: 'var(--muted)' }}>Required:</span>
+      <span style={{ color: 'var(--text)', fontWeight: 700 }}>{required}</span>
+      <span style={{ color: 'var(--line)' }}>|</span>
+      <span style={{ color: 'var(--muted)' }}>Owner primary:</span>
+      <span style={{ color: 'var(--text)' }}>{primary}</span>
+      {secondary && <><span style={{ color: 'var(--line)' }}>·</span><span style={{ color: 'var(--muted)' }}>{secondary}</span></>}
       <Badge color={color} size="xs">{color === 'emerald' ? '✓' : color === 'amber' ? '≈' : '✗'} {label}</Badge>
     </div>
   )
@@ -72,15 +80,15 @@ function OverrunBar({ est, actual }) {
   const color = overrunPct > 50 ? 'bg-rose-500' : overrunPct > 25 ? 'bg-amber-500' : 'bg-emerald-500'
   return (
     <div className="space-y-1">
-      <div className="flex items-center justify-between text-xs">
-        <span className="text-slate-400">{est}h estimated</span>
-        <span className={cx('font-bold', overrunPct > 50 ? 'text-rose-400' : overrunPct > 25 ? 'text-amber-400' : 'text-emerald-400')}>
+      <div className="flex items-center justify-between" style={{ fontSize: 9 }}>
+        <span style={{ color: 'var(--muted)' }}>{est}h estimated</span>
+        <span style={{ fontWeight: 700, color: overrunPct > 50 ? 'var(--pink)' : overrunPct > 25 ? 'var(--orange)' : 'var(--teal)' }}>
           {actual}h actual {overrunPct > 0 ? `(+${overrunPct}%)` : ''}
         </span>
       </div>
-      <div className="relative h-2 rounded-full bg-slate-800 overflow-hidden">
-        <div className="absolute h-2 rounded-full bg-slate-600 transition-all" style={{ width: `${estW}%` }} />
-        <div className={cx('absolute h-2 rounded-full transition-all', color)} style={{ width: `${actW}%` }} />
+      <div className="relative h-2 overflow-hidden" style={{ borderRadius: 999, background: 'var(--panel2)' }}>
+        <div className="absolute h-2 transition-all" style={{ width: `${estW}%`, borderRadius: 999, background: 'var(--line)' }} />
+        <div className="absolute h-2 transition-all" style={{ width: `${actW}%`, borderRadius: 999, background: overrunPct > 50 ? 'var(--pink)' : overrunPct > 25 ? 'var(--orange)' : 'var(--teal)' }} />
       </div>
     </div>
   )
@@ -95,76 +103,66 @@ function ItemCard({ item, defaultOpen = false }) {
             : item.severity === 'MEDIUM' ? 'amber' : 'slate'
 
   return (
-    <div className={cx('rounded-2xl border overflow-hidden', open ? 'border-slate-600' : 'border-slate-700')}>
+    <div className="overflow-hidden" style={{ borderRadius: 7, border: open ? '1px solid var(--line)' : '1px solid var(--line)', background: 'var(--panel)' }}>
       <button
         onClick={() => setOpen(o => !o)}
-        className="w-full flex items-start justify-between gap-3 p-4 text-left hover:bg-slate-800/40 transition"
+        className="w-full flex items-start justify-between gap-3 p-4 text-left transition"
+        style={{ background: 'var(--panel2)' }}
       >
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs text-slate-500">{item.item_id}</span>
+          <div className="flex items-center gap-2 flex-wrap" style={{ fontSize: 9 }}>
+            <span style={{ color: 'var(--muted)' }}>{item.item_id}</span>
             {item.is_spillover && (
-              <span className="text-xs text-slate-500">S{item.from_sprint}→S{item.to_sprint}</span>
+              <span style={{ color: 'var(--muted)' }}>S{item.from_sprint}→S{item.to_sprint}</span>
             )}
             {!item.is_spillover && (
-              <span className="text-xs text-slate-500">Sprint {item.sprint_id}</span>
+              <span style={{ color: 'var(--muted)' }}>Sprint {item.sprint_id}</span>
             )}
           </div>
-          <p className="text-sm font-semibold text-white mt-0.5 truncate">{item.item_title}</p>
-          <p className="text-xs text-slate-400 mt-0.5">{item.owner?.replace(/_/g,' ')}</p>
+          <p className="mt-0.5 truncate" style={{ fontSize: 10, fontWeight: 700, color: 'var(--text)' }}>{item.item_title}</p>
+          <p className="mt-0.5" style={{ fontSize: 9, color: 'var(--muted)' }}>{item.owner?.replace(/_/g,' ')}</p>
         </div>
         <div className="flex flex-col items-end gap-1.5 flex-none">
-          <span className={cx('text-xs font-semibold px-2 py-0.5 rounded-full border', c.bg, c.text, c.border)}>
+          <span className="rounded-full border" style={{ fontSize: 9, fontWeight: 700, padding: '2px 6px', border: '1px solid var(--line)', background: 'var(--panel)', color: c.text }}>
             {rc.icon} {rc.label}
           </span>
           {item.overrun_pct !== null && item.overrun_pct !== undefined && (
-            <span className={cx('text-xs font-bold px-2 py-0.5 rounded-full',
-              item.overrun_pct > 50 ? 'text-rose-300 bg-rose-500/15' :
-              item.overrun_pct > 25 ? 'text-amber-300 bg-amber-500/15' : 'text-slate-300 bg-slate-700')}>
+            <span className="rounded-full" style={{ fontSize: 9, fontWeight: 700, padding: '2px 6px', color: item.overrun_pct > 50 ? 'var(--pink)' : item.overrun_pct > 25 ? 'var(--orange)' : 'var(--text)', background: item.overrun_pct > 50 ? 'rgba(226, 90, 123, 0.12)' : item.overrun_pct > 25 ? 'rgba(255, 151, 80, 0.12)' : 'var(--panel2)' }}>
               {item.overrun_pct > 0 ? `+${item.overrun_pct}%` : `${item.overrun_pct}%`}
             </span>
           )}
-          <span className="text-slate-500 text-xs">{open ? '▲' : '▼'}</span>
+          <span style={{ color: 'var(--muted)', fontSize: 9 }}>{open ? '▲' : '▼'}</span>
         </div>
       </button>
 
       {open && (
-        <div className="px-4 pb-4 border-t border-slate-800 space-y-4 pt-3">
-          {/* Skill match */}
-          <SkillPill
-            required={item.required_skill} primary={item.owner_primary}
-            secondary={item.owner_secondary} exact={item.exact_skill_match}
-            affinity={item.affinity_match}
-          />
+        <div className="px-4 pb-4 space-y-4 pt-3" style={{ borderTop: '1px solid var(--line)' }}>
+          <SkillPill required={item.required_skill} primary={item.owner_primary} secondary={item.owner_secondary} exact={item.exact_skill_match} affinity={item.affinity_match} />
 
-          {/* Effort bar */}
           {item.actual_hrs > 0 && <OverrunBar est={item.estimated_hrs} actual={item.actual_hrs} />}
           {item.actual_hrs === 0 && item.estimated_hrs > 0 && (
-            <div className="text-xs text-amber-300 font-semibold">⏱ {item.estimated_hrs}h planned — item was not started this sprint</div>
+            <div className="font-semibold" style={{ fontSize: 9, color: 'var(--orange)' }}>⏱ {item.estimated_hrs}h planned — item was not started this sprint</div>
           )}
 
-          {/* Root cause explanation */}
-          <div className="rounded-xl bg-slate-800/60 p-3">
-            <div className="text-xs uppercase tracking-[0.12em] text-slate-500 mb-1.5">Root cause analysis</div>
-            <p className="text-sm text-slate-300 leading-6">{item.explanation}</p>
+          <div className="p-3" style={{ borderRadius: 7, background: 'var(--panel2)', border: '1px solid var(--line)' }}>
+            <div className="mb-1.5 uppercase" style={{ fontSize: 9, letterSpacing: '0.12em', color: 'var(--muted)' }}>Root cause analysis</div>
+            <p style={{ fontSize: 10, color: 'var(--text)', lineHeight: 1.6 }}>{item.explanation}</p>
           </div>
 
-          {/* Prevention */}
-          <div className="rounded-xl bg-emerald-500/5 border border-emerald-500/20 p-3">
-            <div className="text-xs uppercase tracking-[0.12em] text-emerald-400 mb-1.5">Preventive action</div>
-            <p className="text-sm text-emerald-200 leading-6">{item.prevention}</p>
+          <div className="p-3" style={{ borderRadius: 7, background: 'rgba(115, 225, 178, 0.08)', border: '1px solid rgba(115, 225, 178, 0.26)' }}>
+            <div className="mb-1.5 uppercase" style={{ fontSize: 9, letterSpacing: '0.12em', color: 'var(--teal)' }}>Preventive action</div>
+            <p style={{ fontSize: 10, color: 'var(--text)', lineHeight: 1.6 }}>{item.prevention}</p>
           </div>
 
-          {/* Metric */}
           {item.metric_to_track && (
-            <div className="flex items-start gap-2 text-xs text-slate-400">
-              <span className="flex-none text-sky-400 font-semibold mt-0.5">📏 Track:</span>
+            <div className="flex items-start gap-2" style={{ fontSize: 9, color: 'var(--muted)' }}>
+              <span className="flex-none font-semibold mt-0.5" style={{ color: 'var(--teal)' }}>📏 Track:</span>
               <span>{item.metric_to_track}</span>
             </div>
           )}
           {item.sprint_action && (
-            <div className="flex items-start gap-2 text-xs text-slate-400">
-              <span className="flex-none text-amber-400 font-semibold mt-0.5">⚡ Next sprint:</span>
+            <div className="flex items-start gap-2" style={{ fontSize: 9, color: 'var(--muted)' }}>
+              <span className="flex-none font-semibold mt-0.5" style={{ color: 'var(--orange)' }}>⚡ Next sprint:</span>
               <span>{item.sprint_action}</span>
             </div>
           )}
@@ -180,15 +178,15 @@ function PersonCard({ person, selected, onSelect }) {
   return (
     <button
       onClick={() => onSelect(person)}
-      className={cx('w-full rounded-2xl border p-4 text-left transition',
-        selected ? 'border-amber-500 bg-amber-500/5' : 'border-slate-700 bg-slate-900 hover:bg-slate-800/50')}
+      className="w-full p-4 text-left transition"
+      style={{ borderRadius: 7, border: selected ? '1px solid var(--orange)' : '1px solid var(--line)', background: selected ? 'rgba(255, 151, 80, 0.08)' : 'var(--panel)', boxShadow: selected ? 'inset 0 0 0 1px rgba(255, 151, 80, 0.18)' : 'none' }}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <div className="text-sm font-bold text-white truncate">{person.resource_id.replace(/_/g,' ')}</div>
-          <div className="text-xs text-slate-500 mt-0.5 truncate">{person.primary_skill}</div>
+          <div className="truncate" style={{ fontSize: 10, fontWeight: 700, color: 'var(--text)' }}>{person.resource_id.replace(/_/g,' ')}</div>
+          <div className="mt-0.5 truncate" style={{ fontSize: 9, color: 'var(--muted)' }}>{person.primary_skill}</div>
         </div>
-        <span className={cx('flex-none text-xs font-semibold px-2.5 py-1 rounded-full border', h.cls)}>
+        <span className="flex-none rounded-full border" style={{ fontSize: 9, fontWeight: 700, padding: '4px 8px', border: '1px solid var(--line)', color: 'var(--text)', background: 'var(--panel2)' }}>
           {person.health_label}
         </span>
       </div>
@@ -196,12 +194,12 @@ function PersonCard({ person, selected, onSelect }) {
       <div className="mt-3 grid grid-cols-3 gap-1">
         {[
           { label: 'Assigned', val: person.total_assigned },
-          { label: 'Issues',   val: person.total_issues, color: person.total_issues > 3 ? 'text-rose-400' : person.total_issues > 1 ? 'text-amber-400' : 'text-white' },
-          { label: 'Overrun',  val: person.avg_overrun_pct > 0 ? `${person.avg_overrun_pct}%` : '—', color: person.avg_overrun_pct > 40 ? 'text-rose-400' : person.avg_overrun_pct > 20 ? 'text-amber-400' : 'text-white' },
+          { label: 'Issues',   val: person.total_issues, color: person.total_issues > 3 ? 'var(--pink)' : person.total_issues > 1 ? 'var(--orange)' : 'var(--text)' },
+          { label: 'Overrun',  val: person.avg_overrun_pct > 0 ? `${person.avg_overrun_pct}%` : '—', color: person.avg_overrun_pct > 40 ? 'var(--pink)' : person.avg_overrun_pct > 20 ? 'var(--orange)' : 'var(--text)' },
         ].map(({ label, val, color }) => (
-          <div key={label} className="rounded-xl bg-slate-800/60 py-1.5 text-center">
-            <div className="text-xs text-slate-500">{label}</div>
-            <div className={cx('text-sm font-bold', color || 'text-white')}>{val}</div>
+          <div key={label} className="py-1.5 text-center" style={{ borderRadius: 7, background: 'var(--panel2)' }}>
+            <div style={{ fontSize: 9, color: 'var(--muted)' }}>{label}</div>
+            <div style={{ fontSize: 10, fontWeight: 700, color: color || 'var(--text)' }}>{val}</div>
           </div>
         ))}
       </div>
@@ -223,29 +221,24 @@ function PersonDetail({ person, spilloverItems, overbillingItems }) {
 
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div className="rounded-3xl border border-slate-700 bg-slate-900 p-5">
+      <div className="p-5" style={{ borderRadius: 7, border: '1px solid var(--line)', background: 'var(--panel)' }}>
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h3 className="text-xl font-bold text-white">{person.resource_id.replace(/_/g,' ')}</h3>
-            <p className="text-sm text-slate-400 mt-0.5">{person.primary_skill}</p>
-            {person.secondary_skill && <p className="text-xs text-slate-500 mt-0.5">Also: {person.secondary_skill}</p>}
+            <h3 style={{ fontSize: 13, fontWeight: 800, color: 'var(--text)' }}>{person.resource_id.replace(/_/g,' ')}</h3>
+            <p className="mt-0.5" style={{ fontSize: 10, color: 'var(--muted)' }}>{person.primary_skill}</p>
+            {person.secondary_skill && <p className="mt-0.5" style={{ fontSize: 9, color: 'var(--muted)' }}>Also: {person.secondary_skill}</p>}
           </div>
-          <span className={cx('text-sm font-bold px-3 py-1.5 rounded-full border', h.cls)}>{person.health_label}</span>
+          <span className="rounded-full border" style={{ fontSize: 10, fontWeight: 700, padding: '4px 8px', border: '1px solid var(--line)', color: 'var(--text)', background: 'var(--panel2)' }}>{person.health_label}</span>
         </div>
 
-        {/* Completion progress bar */}
         {person.total_assigned > 0 && (
           <div className="mt-4 space-y-1.5">
-            <div className="flex justify-between text-xs text-slate-500">
+            <div className="flex justify-between" style={{ fontSize: 9, color: 'var(--muted)' }}>
               <span>{person.completed_count} of {person.total_assigned} items completed</span>
-              <span className="font-semibold text-white">{Math.round(person.completed_count / person.total_assigned * 100)}%</span>
+              <span style={{ fontWeight: 700, color: 'var(--text)' }}>{Math.round(person.completed_count / person.total_assigned * 100)}%</span>
             </div>
-            <div className="h-2 rounded-full bg-slate-800 overflow-hidden">
-              <div
-                className="h-2 rounded-full bg-emerald-500 transition-all"
-                style={{ width: `${Math.round(person.completed_count / person.total_assigned * 100)}%` }}
-              />
+            <div className="h-2 overflow-hidden" style={{ borderRadius: 999, background: 'var(--panel2)' }}>
+              <div className="h-2 transition-all" style={{ width: `${Math.round(person.completed_count / person.total_assigned * 100)}%`, borderRadius: 999, background: 'var(--teal)' }} />
             </div>
           </div>
         )}
@@ -253,21 +246,20 @@ function PersonDetail({ person, spilloverItems, overbillingItems }) {
         <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
           {[
             { l: 'Assigned',   v: person.total_assigned },
-            { l: 'Completed',  v: person.completed_count, color: person.completed_count > 0 ? 'text-emerald-400' : 'text-slate-400' },
-            { l: 'Avg overrun',v: `${person.avg_overrun_pct}%`, color: person.avg_overrun_pct > 40 ? 'text-rose-400' : person.avg_overrun_pct > 20 ? 'text-amber-400' : 'text-emerald-400' },
-            { l: 'Issues',     v: person.total_issues, color: person.total_issues > 3 ? 'text-rose-400' : person.total_issues > 1 ? 'text-amber-400' : 'text-white' },
+            { l: 'Completed',  v: person.completed_count, color: person.completed_count > 0 ? 'var(--teal)' : 'var(--muted)' },
+            { l: 'Avg overrun',v: `${person.avg_overrun_pct}%`, color: person.avg_overrun_pct > 40 ? 'var(--pink)' : person.avg_overrun_pct > 20 ? 'var(--orange)' : 'var(--teal)' },
+            { l: 'Issues',     v: person.total_issues, color: person.total_issues > 3 ? 'var(--pink)' : person.total_issues > 1 ? 'var(--orange)' : 'var(--text)' },
           ].map(({ l, v, color }) => (
-            <div key={l} className="rounded-2xl bg-slate-800/60 border border-slate-700 p-3 text-center">
-              <div className="text-xs text-slate-500">{l}</div>
-              <div className={cx('mt-1 text-2xl font-extrabold', color || 'text-white')}>{v}</div>
+            <div key={l} className="p-3 text-center" style={{ borderRadius: 7, background: 'var(--panel2)', border: '1px solid var(--line)' }}>
+              <div style={{ fontSize: 9, color: 'var(--muted)' }}>{l}</div>
+              <div style={{ marginTop: 4, fontSize: 13, fontWeight: 800, color: color || 'var(--text)' }}>{v}</div>
             </div>
           ))}
         </div>
 
-        {/* Root cause breakdown */}
         {Object.keys(person.root_cause_breakdown).length > 0 && (
           <div className="mt-4">
-            <div className="text-xs uppercase tracking-[0.12em] text-slate-500 mb-2">Issues breakdown</div>
+            <div className="mb-2 uppercase" style={{ fontSize: 9, letterSpacing: '0.12em', color: 'var(--muted)' }}>Issues breakdown</div>
             <div className="flex flex-wrap gap-2">
               {Object.entries(person.root_cause_breakdown).map(([rc, cnt]) => {
                 const m = RC_META[rc] || { label: rc, color: 'slate', icon: '•' }
@@ -278,43 +270,40 @@ function PersonDetail({ person, spilloverItems, overbillingItems }) {
         )}
       </div>
 
-      {/* Action plan */}
       {person.action_plan?.length > 0 && (
-        <div className="rounded-3xl border border-amber-500/30 bg-amber-500/5 p-5">
-          <p className="text-xs uppercase tracking-[0.15em] text-amber-400 mb-3">Action Plan for {person.resource_id.replace(/_/g,' ')}</p>
+        <div className="p-5" style={{ borderRadius: 7, border: '1px solid rgba(255, 151, 80, 0.24)', background: 'rgba(255, 151, 80, 0.08)' }}>
+          <p className="mb-3 uppercase" style={{ fontSize: 9, letterSpacing: '0.15em', color: 'var(--orange)' }}>Action Plan for {person.resource_id.replace(/_/g,' ')}</p>
           <div className="space-y-3">
             {person.action_plan.filter(a => a.priority !== 'INFO').map((a, i) => (
               <div key={i} className="flex gap-3">
-                <span className={cx('flex-none text-xs font-bold px-2 py-0.5 rounded-full mt-0.5 h-fit', PRIORITY_CLS[a.priority] || PRIORITY_CLS.INFO)}>
+                <span className="flex-none rounded-full mt-0.5 h-fit" style={{ fontSize: 9, fontWeight: 700, padding: '2px 6px', border: '1px solid var(--line)', color: 'var(--text)', background: 'var(--panel2)' }}>
                   {a.priority}
                 </span>
                 <div>
-                  <div className="text-xs uppercase tracking-[0.1em] text-slate-500 mb-0.5">{a.type.replace(/_/g,' ')}</div>
-                  <p className="text-sm text-slate-200 leading-6">{a.action}</p>
+                  <div className="mb-0.5 uppercase" style={{ fontSize: 9, letterSpacing: '0.1em', color: 'var(--muted)' }}>{a.type.replace(/_/g,' ')}</div>
+                  <p style={{ fontSize: 10, color: 'var(--text)', lineHeight: 1.6 }}>{a.action}</p>
                 </div>
               </div>
             ))}
             {person.action_plan.every(a => a.priority === 'INFO') && (
-              <p className="text-sm text-emerald-300">{person.action_plan[0]?.action}</p>
+              <p style={{ fontSize: 10, color: 'var(--teal)' }}>{person.action_plan[0]?.action}</p>
             )}
           </div>
         </div>
       )}
 
-      {/* Spillover items */}
       {mySpillover.length > 0 && (
-        <div className="rounded-3xl border border-slate-700 bg-slate-900 p-5">
-          <p className="text-xs uppercase tracking-[0.15em] text-slate-500 mb-3">Spillover items ({mySpillover.length})</p>
+        <div className="p-5" style={{ borderRadius: 7, border: '1px solid var(--line)', background: 'var(--panel)' }}>
+          <p className="mb-3 uppercase" style={{ fontSize: 9, letterSpacing: '0.15em', color: 'var(--muted)' }}>Spillover items ({mySpillover.length})</p>
           <div className="space-y-2">
             {mySpillover.map(s => <ItemCard key={s.item_id} item={s} />)}
           </div>
         </div>
       )}
 
-      {/* Overbilling items */}
       {myOverbilling.length > 0 && (
-        <div className="rounded-3xl border border-slate-700 bg-slate-900 p-5">
-          <p className="text-xs uppercase tracking-[0.15em] text-slate-500 mb-3">Overbilling items ({myOverbilling.length})</p>
+        <div className="p-5" style={{ borderRadius: 7, border: '1px solid var(--line)', background: 'var(--panel)' }}>
+          <p className="mb-3 uppercase" style={{ fontSize: 9, letterSpacing: '0.15em', color: 'var(--muted)' }}>Overbilling items ({myOverbilling.length})</p>
           <div className="space-y-2">
             {myOverbilling.map(o => <ItemCard key={o.item_id + o.sprint_id} item={o} />)}
           </div>
@@ -322,9 +311,9 @@ function PersonDetail({ person, spilloverItems, overbillingItems }) {
       )}
 
       {person.health === 'GOOD' && mySpillover.length === 0 && myOverbilling.length === 0 && (
-        <div className="rounded-3xl border border-emerald-500/30 bg-emerald-500/5 p-6 text-center">
-          <p className="text-lg font-semibold text-emerald-300">✓ No issues detected</p>
-          <p className="text-sm text-slate-400 mt-1">No spillover or overbilling events in analysed sprints.</p>
+        <div className="p-6 text-center" style={{ borderRadius: 7, border: '1px solid rgba(115, 225, 178, 0.24)', background: 'rgba(115, 225, 178, 0.08)' }}>
+          <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--teal)' }}>✓ No issues detected</p>
+          <p className="mt-1" style={{ fontSize: 10, color: 'var(--muted)' }}>No spillover or overbilling events in analysed sprints.</p>
         </div>
       )}
     </div>
@@ -336,56 +325,54 @@ function SummaryBar({ summary }) {
   const dist = summary.root_cause_distribution || {}
   const total = Object.values(dist).reduce((a, b) => a + b, 0) || 1
   const segments = [
-    { key: 'GENUINE_SKILL_MISMATCH',       color: 'bg-rose-600',   label: 'Skill mismatch' },
-    { key: 'RELATED_SKILL_COMPETENCY_GAP', color: 'bg-orange-500', label: 'Related skill gap' },
-    { key: 'COMPETENCY_GAP_HIGH',          color: 'bg-rose-400',   label: 'Comp. gap (high)' },
-    { key: 'COMPETENCY_GAP_MEDIUM',        color: 'bg-amber-400',  label: 'Comp. gap (med)' },
-    { key: 'CAPACITY_SQUEEZE_NOT_STARTED', color: 'bg-amber-600',  label: 'Not started' },
-    { key: 'CAPACITY_OVERCOMMIT',          color: 'bg-amber-300',  label: 'Overcommit' },
-    { key: 'DEPENDENCY_BLOCKED',           color: 'bg-sky-500',    label: 'Dependency' },
-    { key: 'EXTERNAL_BLOCKER',             color: 'bg-sky-300',    label: 'Blocker' },
-    { key: 'ESTIMATION_DRIFT',             color: 'bg-slate-500',  label: 'Estimation drift' },
-    { key: 'MINOR_VARIANCE',               color: 'bg-slate-600',  label: 'Minor variance' },
+    { key: 'GENUINE_SKILL_MISMATCH',       color: 'var(--pink)',   label: 'Skill mismatch' },
+    { key: 'RELATED_SKILL_COMPETENCY_GAP', color: 'var(--orange)', label: 'Related skill gap' },
+    { key: 'COMPETENCY_GAP_HIGH',          color: 'var(--pink)',   label: 'Comp. gap (high)' },
+    { key: 'COMPETENCY_GAP_MEDIUM',        color: 'var(--orange)',  label: 'Comp. gap (med)' },
+    { key: 'CAPACITY_SQUEEZE_NOT_STARTED', color: 'var(--orange)',  label: 'Not started' },
+    { key: 'CAPACITY_OVERCOMMIT',          color: 'var(--orange)',  label: 'Overcommit' },
+    { key: 'DEPENDENCY_BLOCKED',           color: 'var(--teal)',    label: 'Dependency' },
+    { key: 'EXTERNAL_BLOCKER',             color: 'var(--teal)',    label: 'Blocker' },
+    { key: 'ESTIMATION_DRIFT',             color: 'var(--muted)',  label: 'Estimation drift' },
+    { key: 'MINOR_VARIANCE',               color: 'var(--line)',  label: 'Minor variance' },
   ].filter(s => dist[s.key] > 0)
 
   return (
-    <section className="rounded-3xl border border-slate-700 bg-slate-900 p-6">
+    <section className="p-6" style={{ border: '1px solid var(--line)', borderRadius: 8, background: 'var(--panel)' }}>
       <div className="flex flex-col gap-1">
-        <p className="text-sm uppercase tracking-[0.3em] text-amber-400">Sprint Health</p>
-        <h2 className="text-2xl font-bold text-white">
+        <p className="uppercase" style={{ fontSize: 9, letterSpacing: '0.3em', color: 'var(--orange)' }}>Sprint Health</p>
+        <h2 style={{ fontSize: 13, fontWeight: 800, color: 'var(--text)' }}>
           {summary.sprints_analysed} sprints · {summary.total_wasted_hrs}h wasted effort
         </h2>
-        <p className="text-sm text-slate-400">{summary.overall_summary}</p>
+        <p style={{ fontSize: 10, color: 'var(--muted)' }}>{summary.overall_summary}</p>
       </div>
 
       <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
-          { label: 'Spillover items',    val: summary.total_spillover,   color: 'text-amber-400' },
-          { label: 'Overbilling items',  val: summary.total_overbilling,  color: 'text-rose-400' },
-          { label: 'Hours wasted',       val: `${summary.total_wasted_hrs}h`, color: 'text-rose-400' },
+          { label: 'Spillover items',    val: summary.total_spillover,   color: 'var(--orange)' },
+          { label: 'Overbilling items',  val: summary.total_overbilling,  color: 'var(--pink)' },
+          { label: 'Hours wasted',       val: `${summary.total_wasted_hrs}h`, color: 'var(--pink)' },
           { label: 'People to act on',   val: summary.people_critical + summary.people_watch,
-            color: summary.people_critical > 0 ? 'text-rose-400' : 'text-amber-400' },
+            color: summary.people_critical > 0 ? 'var(--pink)' : 'var(--orange)' },
         ].map(({ label, val, color }) => (
-          <div key={label} className="rounded-2xl border border-slate-700 bg-slate-950/60 p-4">
-            <div className="text-xs uppercase tracking-[0.12em] text-slate-500">{label}</div>
-            <div className={cx('mt-1 text-3xl font-extrabold', color)}>{val}</div>
+          <div key={label} className="p-4" style={{ borderRadius: 7, border: '1px solid var(--line)', background: 'var(--panel2)' }}>
+            <div className="uppercase" style={{ fontSize: 9, letterSpacing: '0.12em', color: 'var(--muted)' }}>{label}</div>
+            <div className="mt-1" style={{ fontSize: 13, fontWeight: 800, color }}>{val}</div>
           </div>
         ))}
       </div>
 
       <div className="mt-5">
-        <div className="text-xs uppercase tracking-[0.12em] text-slate-500 mb-2">Root cause distribution</div>
-        <div className="flex h-3 rounded-full overflow-hidden gap-px">
+        <div className="mb-2 uppercase" style={{ fontSize: 9, letterSpacing: '0.12em', color: 'var(--muted)' }}>Root cause distribution</div>
+        <div className="flex h-3 overflow-hidden gap-px" style={{ borderRadius: 999 }}>
           {segments.map(s => (
-            <div key={s.key} className={cx(s.color, 'h-3 transition-all')}
-              style={{ width: `${Math.round(dist[s.key] / total * 100)}%` }}
-              title={`${s.label}: ${dist[s.key]}`} />
+            <div key={s.key} className="h-3 transition-all" style={{ width: `${Math.round(dist[s.key] / total * 100)}%`, background: s.color }} title={`${s.label}: ${dist[s.key]}`} />
           ))}
         </div>
         <div className="mt-2 flex flex-wrap gap-3">
           {segments.map(s => (
-            <div key={s.key} className="flex items-center gap-1.5 text-xs text-slate-400">
-              <span className={cx('w-2.5 h-2.5 rounded-full flex-none', s.color)} />
+            <div key={s.key} className="flex items-center gap-1.5" style={{ fontSize: 9, color: 'var(--muted)' }}>
+              <span className="w-2.5 h-2.5 rounded-full flex-none" style={{ background: s.color }} />
               {s.label} ({dist[s.key]})
             </div>
           ))}
@@ -408,53 +395,48 @@ function SystemicCard({ priority, sprint, trigger, finding, action, confidence, 
   const cfg = PRIORITY_CONFIG[priority] || PRIORITY_CONFIG.INFO
 
   return (
-    <div className={cx('rounded-2xl border overflow-hidden transition-all', cfg.ring, open ? cfg.bg : 'bg-slate-900/60')}>
+    <div className="overflow-hidden transition-all" style={{ borderRadius: 7, border: '1px solid var(--line)', background: open ? 'rgba(255, 151, 80, 0.08)' : 'var(--panel)' }}>
       <button
         onClick={() => setOpen(o => !o)}
         className="w-full flex items-start gap-4 px-5 py-4 text-left group"
       >
-        {/* Priority dot — left accent */}
         <div className="flex-none pt-1">
           <span className={cx('block w-2.5 h-2.5 rounded-full mt-0.5', cfg.dot)} />
         </div>
 
         <div className="flex-1 min-w-0">
-          {/* Title row */}
           <div className="flex items-start justify-between gap-3">
-            <p className="text-sm font-semibold text-white leading-snug">{trigger}</p>
+            <p style={{ fontSize: 10, fontWeight: 700, color: 'var(--text)', lineHeight: 1.4 }}>{trigger}</p>
             {sprint && (
-              <span className="flex-none text-[11px] font-medium text-slate-500 whitespace-nowrap mt-0.5">{sprint}</span>
+              <span className="flex-none whitespace-nowrap mt-0.5" style={{ fontSize: 9, color: 'var(--muted)' }}>{sprint}</span>
             )}
           </div>
-          {/* Action preview — always visible, never truncated */}
-          <p className={cx('mt-1.5 text-xs leading-5', cfg.labelCls)}>
+          <p className="mt-1.5" style={{ fontSize: 9, lineHeight: 1.5, color: cfg.labelCls.includes('text-rose') ? 'var(--pink)' : cfg.labelCls.includes('text-orange') ? 'var(--orange)' : cfg.labelCls.includes('text-amber') ? 'var(--orange)' : 'var(--muted)' }}>
             {action}
           </p>
         </div>
 
-        {/* Chevron */}
-        <div className="flex-none pt-1 text-slate-600 group-hover:text-slate-400 transition">
+        <div className="flex-none pt-1 transition" style={{ color: 'var(--muted)' }}>
           <svg className={cx('w-4 h-4 transition-transform', open && 'rotate-180')} viewBox="0 0 16 16" fill="none">
             <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
         </div>
       </button>
 
-      {/* Expanded body */}
       {open && (
-        <div className="px-5 pb-5 pt-1 space-y-4 border-t border-slate-800/60">
+        <div className="px-5 pb-5 pt-1 space-y-4" style={{ borderTop: '1px solid var(--line)' }}>
           {finding && (
-            <p className="text-sm text-slate-400 leading-6">{finding}</p>
+            <p style={{ fontSize: 10, color: 'var(--muted)', lineHeight: 1.6 }}>{finding}</p>
           )}
-          <div className={cx('rounded-xl border px-4 py-3', cfg.actionBorder, cfg.actionBg)}>
-            <p className={cx('text-[11px] uppercase tracking-[0.15em] font-semibold mb-1.5', cfg.labelCls)}>Recommended action</p>
-            <p className="text-sm text-slate-200 leading-6">{action}</p>
+          <div className="px-4 py-3" style={{ borderRadius: 7, border: '1px solid var(--line)', background: 'var(--panel2)' }}>
+            <p className="mb-1.5 uppercase" style={{ fontSize: 9, letterSpacing: '0.15em', fontWeight: 700, color: cfg.labelCls.includes('text-rose') ? 'var(--pink)' : cfg.labelCls.includes('text-orange') ? 'var(--orange)' : cfg.labelCls.includes('text-amber') ? 'var(--orange)' : 'var(--muted)' }}>Recommended action</p>
+            <p style={{ fontSize: 10, color: 'var(--text)', lineHeight: 1.6 }}>{action}</p>
           </div>
           {evidence?.length > 0 && (
             <div className="space-y-1.5 pl-1">
               {evidence.map((e, j) => (
-                <div key={j} className="flex items-start gap-2 text-xs text-slate-500">
-                  <span className="flex-none text-slate-700 mt-0.5">›</span>
+                <div key={j} className="flex items-start gap-2" style={{ fontSize: 9, color: 'var(--muted)' }}>
+                  <span className="flex-none mt-0.5" style={{ color: 'var(--line)' }}>›</span>
                   <span>{e}</span>
                 </div>
               ))}

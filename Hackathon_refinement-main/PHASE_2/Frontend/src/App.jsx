@@ -29,19 +29,19 @@ export default function App(){
 
   return (
     <div className="app-shell font-sans">
-      <div className="max-w-7xl mx-auto p-6">
-        <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
+      <div className="max-w-7xl mx-auto p-4">
+        <header className="flex justify-between items-start px-1 pb-2">
           <div>
-            <h1 className="text-3xl font-extrabold">Sprint Whisperer</h1>
-            <p className="text-sm text-slate-300">Project forecasting & risk dashboard</p>
+            <div className="text-[15px] font-extrabold tracking-tight leading-none">Sprint Whisperer</div>
+            <div className="text-[8px] text-[var(--muted)] mt-0.5 tracking-wide">Project forecasting & decision intelligence</div>
           </div>
           <div>
-            {backendOk===null ? (
-              <span className="px-3 py-1 bg-slate-700 text-slate-200 rounded">Checking backend…</span>
+            {backendOk === null ? (
+              <span className="text-[9px] font-bold px-2 py-1 bg-slate-700 text-slate-400 rounded">Checking…</span>
             ) : backendOk ? (
-              <span className="px-3 py-1 bg-emerald-600 text-white rounded">Backend: OK</span>
+              <span className="text-[9px] font-extrabold px-2 py-1 bg-[var(--teal)] text-[var(--bg)] rounded">Backend: OK</span>
             ) : (
-              <span className="px-3 py-1 bg-red-600 text-white rounded">Backend unreachable</span>
+              <span className="text-[9px] font-extrabold px-2 py-1 bg-red-600 text-white rounded">Backend unreachable</span>
             )}
           </div>
         </header>

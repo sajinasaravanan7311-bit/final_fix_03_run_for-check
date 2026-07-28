@@ -6,17 +6,25 @@ module.exports = {
   ],
   theme: {
     extend: {
-      fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
-        serif: ['Merriweather', 'serif']
-      },
       colors: {
-        risk: {
-          green: '#16a34a',
-          amber: '#f59e0b',
-          red: '#dc2626'
-        }
-      }
+        panel:  'var(--panel)',
+        panel2: 'var(--panel2)',
+        line:   'var(--line)',
+        line2:  'var(--line2)',
+        teal:   'var(--teal)',
+        orange: 'var(--orange)',
+        pink:   'var(--pink)',
+        muted:  'var(--muted)',
+      },
+      borderRadius: {
+        card:  '7px',
+        sm:    '4px',
+        badge: '3px',
+      },
+      fontFamily: {
+        sans: ['Manrope', 'system-ui'],
+        mono: ['DM Mono', 'monospace'],
+      },
     }
   },
   plugins: []
